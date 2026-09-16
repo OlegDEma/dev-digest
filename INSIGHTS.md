@@ -67,6 +67,23 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
 
 - **2026-09-15** — INSIGHTS section sets differ by scope, so the "never invent a heading" rule needs care when recording: the **root** file carries **Session Notes** and no **Decisions**; every **module** file (`server`/`client`/`reviewer-core`/`e2e`) carries **Decisions** and no **Session Notes**. Both share the other five (What Works · What Doesn't Work · Codebase Patterns · Tool & Library Notes · Recurring Errors & Fixes · Open Questions). Record under a heading that already exists in the *target* file — a module-level decision goes under **Decisions**, a cross-package session summary under root **Session Notes**; don't cross them. Evidence: `grep -n '^##' INSIGHTS.md server/INSIGHTS.md`. Encoded in the `engineering-insights` skill (`.claude/skills/engineering-insights/SKILL.md` step 4).
 
+- **2026-09-16** — Findings render on two screens with two DIFFERENT aggregation
+  rules the server and client must keep in lockstep (the "Findings on timeline +
+  list" lab, `specs/02-findings-on-timeline.md` §3). A finding has no `run_id` —
+  it links transitively `findings.review_id → reviews.run_id → agent_runs.id`, and
+  one run can carry two review rows (`kind` summary\|review) sharing a run_id.
+  **Timeline (per run):** union the findings of every review whose `run_id`
+  matches, dedupe by id, drop dismissed (`client/src/lib/findings.ts`
+  `findingsByRun`). **List (per PR):** union the LATEST `review` per agent (newest
+  `created_at` per `agent_id`; null-agent → one `∅` bucket), drop dismissed —
+  additive across agents like COST, **not** the single-latest-review rule `score`
+  uses. The server computes the list counts and the client re-derives the same set
+  for the hover card (`currentFindings`); they reconcile only if both apply this
+  exact rule — verified live: list `findings_by_severity` == severity-grouped
+  `/pulls/:id/reviews`. Evidence: `client/src/lib/findings.ts`,
+  `server/src/modules/pulls/routes.ts` (`findingsByPr` loop),
+  `server/test/pr-list-findings.it.test.ts`.
+
 ## Tool & Library Notes
 
 - **2026-07-29** — Half this repo is pnpm and half is npm, so running `pnpm install` in `reviewer-core/` or `e2e/` would create a second competing lockfile — match the lockfile already in the directory, not the root README's pnpm prerequisite.

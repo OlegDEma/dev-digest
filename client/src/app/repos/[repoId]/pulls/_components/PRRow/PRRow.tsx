@@ -10,6 +10,7 @@ import { formatCostUsd } from "@/lib/format";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
+import { PrFindingsCell } from "./PrFindingsCell";
 
 export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const t = useTranslations("prReview");
@@ -53,6 +54,9 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         ) : (
           <span style={s.muted}>—</span>
         )}
+      </div>
+      <div style={s.findingsCell} onClick={(e) => e.stopPropagation()}>
+        <PrFindingsCell pr={pr} />
       </div>
       <div>
         <Badge dot color={st.c} bg="transparent">

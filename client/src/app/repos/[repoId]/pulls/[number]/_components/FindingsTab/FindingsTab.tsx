@@ -6,6 +6,7 @@ import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
 import { s } from "./styles";
+import { findingsByRun } from "@/lib/findings";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
@@ -71,6 +72,11 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // run_id → its findings, so each timeline run can show a severity breakdown +
+  // hover card. Findings live on the reviews (not the RunSummary rows), keyed to
+  // a run via reviews.run_id — see lib/findings.findingsByRun.
+  const findingsByRunMap = React.useMemo(() => findingsByRun(runs), [runs]);
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -131,6 +137,9 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRun={findingsByRunMap}
+            repoFullName={repoFullName}
+            headSha={headSha}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

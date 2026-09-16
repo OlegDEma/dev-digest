@@ -101,21 +101,27 @@ time). Making it optional would let a builder silently omit it.
 
 ## 5. Cost formatting (client)
 
-One shared helper (new `client/src/lib/format.ts`, or colocate; reused by all
-three screens):
+One shared helper (new `client/src/lib/format.ts`, reused by all three screens):
 
 ```ts
-/** USD cost for the UI. null/undefined → em dash; never "$0.00" for a real cost. */
+/** USD cost for the UI: fixed 6 decimals so a column of costs aligns and sums
+    by eye. null/undefined → em dash; never a fake number. */
 export function formatCostUsd(n: number | null | undefined): string {
   if (n == null) return "—";
-  if (n === 0) return "$0.00";              // real free-model zero, truthful
-  return `$${Number(n.toPrecision(3))}`;    // 3 significant figures, trailing zeros trimmed
+  return `$${n.toFixed(6)}`;
 }
 ```
 
-`toPrecision(3)` → `Number` reproduces every design example without special
-cases: `0.012→$0.012`, `0.0013→$0.0013`, `0.014→$0.014`, `0.06→$0.06`,
-`0.003→$0.003`, `1.23→$1.23`. It never collapses a sub-cent cost to `$0.01`.
+**Fixed decimals, not significant figures (corrected 2026-09-16).** The first
+cut used `Number(n.toPrecision(3))` — reads well for a single value, but review
+costs are sub-cent and often micro-dollar, so across a *column* it renders
+`$0.0000246` and `$0.000252` (a 10× gap) with a different number of decimals, so
+they look alike and don't visibly add up — a user summing the timeline can't
+reconcile it with the PR total. Fixed `toFixed(6)` keeps micro-dollar costs
+visible (`$0.000025`) and aligned, and never collapses a real cost to `$0.00`.
+Trade-off: milli-dollar values carry trailing zeros (`$0.012` → `$0.012000`).
+Residual: hand-summing rounded rows can differ from the rounded true total by
+<1µ$ — inherent to displaying rounded values.
 
 Timeline token+cost line: `${(tokens_in + tokens_out).toLocaleString()} tok · ${formatCostUsd(cost_usd)}`.
 
@@ -148,8 +154,11 @@ Timeline token+cost line: `${(tokens_in + tokens_out).toLocaleString()} tok · $
 **Format & integrity (design verification tasks)**
 - **AC-8** (*звірка цифр*) — The displayed cost shall equal the run log's cost and
   the OpenRouter dashboard cost for the same run (reconciled on one real run).
-- **AC-9** (*формат читабельний*) — Cost shall render with ≥3 significant digits
-  (`$0.012`, not `$0.01`).
+- **AC-9** (*формат читабельний*) — Cost shall render at a fixed precision
+  (6 decimals) so a column of per-agent costs aligns and sums by eye, and shall
+  never collapse a real sub-cent cost to `$0.00`. (Superseded the original
+  "≥3 significant figures" rule, which made micro-dollar values incomparable —
+  see §5.)
 - **AC-10** (*stale/незавершений*) — An incomplete/failed run shall never show a
   fabricated price; it shows `—`.
 - **AC-11** (*нуль зайвих викликів*) — The feature shall add **zero** additional

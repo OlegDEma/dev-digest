@@ -40,4 +40,35 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
   `RunHistory.test.tsx`. Sweep `grep -rn 'duration_ms' server client` (src AND
   test dirs) before assuming you've found them all. Evidence: `test/contracts.test.ts:160`.
 
+- **2026-09-16** — With `REPO_INTEL_ENABLED=true` (the `.env` default), running a
+  review on the **seeded demo repo `acme/payments-api`** (which does not exist on
+  GitHub) makes repo-intel enqueue a background `git clone` that 404s, and the
+  `GitError` is **uncaught** → it crashes the whole API process (client then shows
+  "Cannot reach the DevDigest engine at http://localhost:3001"). `loadDiff` itself
+  is safe (it try/catches and falls back to `diffFromPrFiles` persisted patches),
+  so reviews still work without a clone — only the repo-intel index job is fatal.
+  Fix for local dev: set `REPO_INTEL_ENABLED=false` in `server/.env` (repo-intel
+  can never clone a fake seed repo anyway; reviews degrade to the ripgrep-only /
+  persisted-diff path, identical to the repo-intel-off baseline). A fresh fork is
+  extra-exposed because it has no `server/clones/`. Deeper bug worth fixing:
+  the index/clone job should catch and mark the run failed, not take down the
+  server. Evidence: task log `Cloning into '.../clones/acme/payments-api' … remote:
+  Repository not found`; `src/modules/repo-intel/service.ts:112` (enqueue),
+  `src/modules/reviews/diff-loader.ts:8-26` (safe fallback).
+  - **2026-09-16 (real root cause + proper fix)** — Disabling repo-intel only
+    dodged ONE trigger; the actual bug is in `JobRunner.enqueue`
+    (`src/platform/jobs.ts`): on final failure the queued task records
+    `status:'failed'` in the `jobs` row **and re-throws**, so the returned `done`
+    promise rejects. Fire-and-forget callers (`repos/service.ts` `add`/`refresh`
+    → clone, `:98`/`:117`) never await `done`, so that rejection is **unhandled →
+    Node kills the whole API** on ANY failed background job (e.g. cloning the
+    seeded fake repo `acme/payments-api`, which 404s). This is why the crash
+    recurred even with repo-intel off and clone jobs already marked `failed`. Fix:
+    `void done.catch(() => {})` in `enqueue` after scheduling — the failure is
+    already persisted, and explicit awaiters still observe the rejection. Verified
+    by `POST /repos/:id/refresh` on the fake repo: clone fails, server stays up
+    (before the fix it died every time). With this in place `REPO_INTEL_ENABLED`
+    can safely go back to `true`. Evidence: `src/platform/jobs.ts` (enqueue
+    `done.catch`); `curl -X POST /repos/<acme>/refresh` then `/repos` → 200 ×3.
+
 ## Open Questions

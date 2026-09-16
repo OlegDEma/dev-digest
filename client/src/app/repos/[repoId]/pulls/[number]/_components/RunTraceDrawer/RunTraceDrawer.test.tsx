@@ -46,7 +46,7 @@ describe("A5 Run Trace drawer (smoke)", () => {
     expect(screen.getByText("2/2 passed")).toBeInTheDocument();
     // Cost tile in the Stats block (Duration · Tokens · Cost · Findings).
     expect(screen.getByText("COST")).toBeInTheDocument();
-    expect(screen.getByText("$0.06")).toBeInTheDocument();
+    expect(screen.getByText("$0.060000")).toBeInTheDocument();
     expect(screen.getByText("Tool calls")).toBeInTheDocument();
   });
 

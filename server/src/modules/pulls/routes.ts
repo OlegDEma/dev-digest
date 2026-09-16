@@ -113,8 +113,8 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap. (The per-severity FINDINGS breakdown is computed the
+    // same way below and surfaced on the list as severity chips + a hover card.)
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -158,6 +158,54 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // FINDINGS breakdown = the PR's current findings by severity: the union of
+    // the latest `review` per agent (additive across agents, like COST), counting
+    // only non-dismissed findings. Two IN-queries + JS grouping (the list is
+    // small). Left null when a PR has no such findings → renders "—".
+    const findingsByPr = new Map<
+      string,
+      { CRITICAL: number; WARNING: number; SUGGESTION: number }
+    >();
+    if (prIds.length > 0) {
+      const reviewRows = await container.db
+        .select({ id: t.reviews.id, prId: t.reviews.prId, agentId: t.reviews.agentId })
+        .from(t.reviews)
+        .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+        .orderBy(desc(t.reviews.createdAt));
+      // Newest-first → the first review per (pr, agent) is that agent's latest.
+      const reviewPrId = new Map<string, string>();
+      const countedAgents = new Map<string, Set<string>>();
+      for (const rv of reviewRows) {
+        const agentKey = rv.agentId ?? '∅';
+        const counted = countedAgents.get(rv.prId) ?? new Set<string>();
+        if (counted.has(agentKey)) continue; // an older review for this agent — skip
+        counted.add(agentKey);
+        countedAgents.set(rv.prId, counted);
+        reviewPrId.set(rv.id, rv.prId);
+      }
+      const latestReviewIds = [...reviewPrId.keys()];
+      if (latestReviewIds.length > 0) {
+        const findingRows = await container.db
+          .select({
+            reviewId: t.findings.reviewId,
+            severity: t.findings.severity,
+            dismissedAt: t.findings.dismissedAt,
+          })
+          .from(t.findings)
+          .where(inArray(t.findings.reviewId, latestReviewIds));
+        for (const f of findingRows) {
+          if (f.dismissedAt) continue;
+          if (f.severity !== 'CRITICAL' && f.severity !== 'WARNING' && f.severity !== 'SUGGESTION')
+            continue;
+          const prId = reviewPrId.get(f.reviewId);
+          if (!prId) continue;
+          const bucket = findingsByPr.get(prId) ?? { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 };
+          bucket[f.severity] += 1;
+          findingsByPr.set(prId, bucket);
+        }
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -183,6 +231,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: costByPr.get(r.id) ?? null,
+        findings_by_severity: findingsByPr.get(r.id) ?? null,
       };
     });
   });

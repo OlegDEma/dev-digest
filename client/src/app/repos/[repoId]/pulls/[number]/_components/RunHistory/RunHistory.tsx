@@ -3,8 +3,10 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
 import { formatCostUsd } from "@/lib/format";
+import { severityCounts } from "@/lib/findings";
+import { SeverityCounts, FindingsHoverCard } from "@/components/findings";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -88,12 +90,21 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  findingsByRun,
+  repoFullName,
+  headSha,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** run_id → its findings (from usePrReviews), for the severity chips + hover
+   *  card. Absent (or a missing run) falls back to the plain findings-count text. */
+  findingsByRun?: Map<string, FindingRecord[]>;
+  /** owner/repo + head sha — deep-link a finding's file:line to GitHub. */
+  repoFullName?: string | null;
+  headSha?: string | null;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -150,6 +161,7 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        const runFindings = settled ? findingsByRun?.get(r.run_id) ?? [] : [];
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -189,12 +201,21 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                </div>
-              )}
+              {settled &&
+                (runFindings.length > 0 ? (
+                  <FindingsHoverCard
+                    findings={runFindings}
+                    repoFullName={repoFullName}
+                    headSha={headSha}
+                  >
+                    <SeverityCounts counts={severityCounts(runFindings)} blockers={r.blockers} />
+                  </FindingsHoverCard>
+                ) : (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                    {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                  </div>
+                ))}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}

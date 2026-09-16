@@ -2,28 +2,28 @@ import { describe, it, expect } from "vitest";
 import { formatCostUsd } from "./format";
 
 describe("formatCostUsd (Run Cost Badge)", () => {
-  it("renders null/undefined as an em dash, never a fake price", () => {
+  it("renders null/undefined as an em dash, never a number", () => {
     expect(formatCostUsd(null)).toBe("—");
     expect(formatCostUsd(undefined)).toBe("—");
   });
 
-  it("renders a genuine zero as $0.00 (truthful, distinct from unknown)", () => {
-    expect(formatCostUsd(0)).toBe("$0.00");
+  it("uses fixed 6 decimals so a column of costs aligns and sums by eye", () => {
+    // Real per-agent run costs from one review round (micro-dollar range).
+    expect(formatCostUsd(0.00002455)).toBe("$0.000025");
+    expect(formatCostUsd(0.00025172)).toBe("$0.000252");
+    expect(formatCostUsd(0.00017352)).toBe("$0.000174");
+    // …and their sum renders with the SAME precision.
+    expect(formatCostUsd(0.0005317)).toBe("$0.000532");
   });
 
-  it("keeps ≥3 significant figures for sub-cent costs (never collapses to $0.01)", () => {
-    expect(formatCostUsd(0.012)).toBe("$0.012");
-    expect(formatCostUsd(0.0013)).toBe("$0.0013");
-    expect(formatCostUsd(0.014)).toBe("$0.014");
-    expect(formatCostUsd(0.003)).toBe("$0.003");
+  it("keeps sub-cent costs visible — never collapses a real cost to $0.00", () => {
+    expect(formatCostUsd(0.0013)).toBe("$0.001300");
+    expect(formatCostUsd(0.012)).toBe("$0.012000");
   });
 
-  it("trims trailing zeros (matches the design's $0.06)", () => {
-    expect(formatCostUsd(0.06)).toBe("$0.06");
-    expect(formatCostUsd(0.028)).toBe("$0.028");
-  });
-
-  it("rounds larger costs to 3 significant figures", () => {
-    expect(formatCostUsd(1.2345)).toBe("$1.23");
+  it("renders a genuine zero and larger costs at the same precision", () => {
+    expect(formatCostUsd(0)).toBe("$0.000000");
+    expect(formatCostUsd(0.06)).toBe("$0.060000");
+    expect(formatCostUsd(1.2345)).toBe("$1.234500");
   });
 });
