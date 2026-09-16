@@ -22,6 +22,8 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** ?finding=<id> from the URL (arriving from the PR list) → scroll to it once. */
+  initialFindingId?: string | null;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -38,6 +40,7 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  initialFindingId,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -67,10 +70,27 @@ export function FindingsTab({
   // Timeline → Review-runs navigation: clicking an agent name in the timeline
   // opens + scrolls to that run's accordion below. The nonce re-triggers the
   // scroll even when the same run is clicked twice.
-  const [target, setTarget] = React.useState<{ runId: string; n: number } | null>(null);
+  const [target, setTarget] = React.useState<{
+    runId?: string;
+    findingId?: string;
+    n: number;
+  } | null>(null);
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+  // Clicking a finding in a timeline hover card jumps to it in the accordion.
+  const handleGoToFinding = useCallback((finding: FindingRecord) => {
+    setTarget((p) => ({ findingId: finding.id, n: (p?.n ?? 0) + 1 }));
+  }, []);
+
+  // Arriving from the PR list with ?finding=<id> → jump to that finding once it
+  // (and the reviews) are here. Re-fires only when the id in the URL changes.
+  React.useEffect(() => {
+    if (initialFindingId) {
+      setTarget((p) => ({ findingId: initialFindingId, n: (p?.n ?? 0) + 1 }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFindingId]);
 
   // run_id → its findings, so each timeline run can show a severity breakdown +
   // hover card. Findings live on the reviews (not the RunSummary rows), keyed to
@@ -142,6 +162,7 @@ export function FindingsTab({
             headSha={headSha}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
+            onFindingClick={handleGoToFinding}
             onDelete={handleDelete}
           />
         </div>
@@ -172,6 +193,7 @@ export function FindingsTab({
             repoFullName={repoFullName}
             headSha={headSha}
             targetRunId={target?.runId ?? null}
+            targetFindingId={target?.findingId ?? null}
             targetNonce={target?.n ?? 0}
           />
         ))

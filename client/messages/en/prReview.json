@@ -109,6 +109,7 @@
     "deleteRun": "Delete run",
     "tokensCost": "{tokens} tok · {cost}",
     "findingsCount": "{count, plural, one {# finding} other {# findings}}",
-    "findingsLoading": "Loading findings…"
+    "findingsLoading": "Loading findings…",
+    "openFinding": "Open in Agent runs"
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
@@ -37,6 +37,7 @@ function renderCard(props: Partial<React.ComponentProps<typeof FindingsHoverCard
         repoFullName="acme/payments-api"
         headSha="abc1234"
         loading={props.loading}
+        onFindingClick={props.onFindingClick}
       >
         <span>chips</span>
       </FindingsHoverCard>
@@ -86,6 +87,25 @@ describe("FindingsHoverCard", () => {
     expect(screen.getByText("Secret key")).toBeInTheDocument();
     fireEvent.keyDown(trigger, { key: "Escape" });
     expect(screen.queryByText("Secret key")).not.toBeInTheDocument();
+  });
+
+  it("calls onFindingClick when a finding row is clicked, but not its file link", () => {
+    const onFindingClick = vi.fn();
+    const { trigger } = renderCard({
+      findings: [
+        finding({ id: "x1", title: "Clickable finding", file: "src/config.ts", start_line: 12, end_line: 12 }),
+      ],
+      onFindingClick,
+    });
+    fireEvent.mouseEnter(trigger);
+
+    // Clicking the file:line GitHub link must NOT jump to the finding.
+    fireEvent.click(screen.getByText("src/config.ts:12"));
+    expect(onFindingClick).not.toHaveBeenCalled();
+
+    // Clicking the row (title) jumps to the finding.
+    fireEvent.click(screen.getByText("Clickable finding"));
+    expect(onFindingClick).toHaveBeenCalledWith(expect.objectContaining({ id: "x1" }));
   });
 
   it("stays open while scrolling INSIDE the card, closes only on page scroll", () => {

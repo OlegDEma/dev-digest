@@ -56,7 +56,7 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         )}
       </div>
       <div style={s.findingsCell} onClick={(e) => e.stopPropagation()}>
-        <PrFindingsCell pr={pr} />
+        <PrFindingsCell pr={pr} repoId={repoId} />
       </div>
       <div>
         <Badge dot color={st.c} bg="transparent">

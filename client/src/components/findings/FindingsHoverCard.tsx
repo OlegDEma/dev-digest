@@ -115,6 +115,7 @@ export function FindingsHoverCard({
   repoFullName,
   headSha,
   onOpenChange,
+  onFindingClick,
   children,
 }: {
   findings: FindingRecord[];
@@ -124,11 +125,15 @@ export function FindingsHoverCard({
   headSha?: string | null;
   /** Fires on open/close — lets a caller lazily fetch findings on first open. */
   onOpenChange?: (open: boolean) => void;
+  /** Click a finding → jump to it in the "Review runs" list (see FindingsTab).
+   *  When set, each row becomes clickable (except its file:line GitHub link). */
+  onFindingClick?: (finding: FindingRecord) => void;
   /** The trigger (usually the <SeverityCounts> chips). */
   children: React.ReactNode;
 }) {
   const t = useTranslations("prReview");
   const [open, setOpen] = React.useState(false);
+  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const [pos, setPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLSpanElement>(null);
   const cardRef = React.useRef<HTMLDivElement>(null);
@@ -229,8 +234,38 @@ export function FindingsHoverCard({
                 repoFullName && headSha
                   ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
                   : undefined;
+              const clickable = !!onFindingClick;
+              const go = (e: React.SyntheticEvent) => {
+                // Let the file:line GitHub link do its own thing.
+                if ((e.target as HTMLElement).closest("a")) return;
+                setOpen(false);
+                onFindingClick!(f);
+              };
               return (
-                <div key={f.id} style={s.row}>
+                <div
+                  key={f.id}
+                  style={{
+                    ...s.row,
+                    ...(clickable ? { cursor: "pointer" } : null),
+                    ...(clickable && hoveredId === f.id ? { background: "var(--bg-hover)" } : null),
+                  }}
+                  role={clickable ? "button" : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  title={clickable ? t("timeline.openFinding") : undefined}
+                  onMouseEnter={clickable ? () => setHoveredId(f.id) : undefined}
+                  onMouseLeave={clickable ? () => setHoveredId(null) : undefined}
+                  onClick={clickable ? go : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            go(e);
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   <div style={s.titleRow}>
                     <SeverityBadge severity={f.severity as Severity} compact />
                     <span style={s.title}>{f.title}</span>

@@ -6,13 +6,15 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import type { PrMeta } from "@/lib/types";
 import { usePrReviews } from "@/lib/hooks/reviews";
 import { currentFindings } from "@/lib/findings";
 import { SeverityCounts, FindingsHoverCard } from "@/components/findings";
 import { s } from "../../styles";
 
-export function PrFindingsCell({ pr }: { pr: PrMeta }) {
+export function PrFindingsCell({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+  const router = useRouter();
   const counts = pr.findings_by_severity;
   // Enable the reviews query only after the card first opens (hover/focus).
   const [active, setActive] = React.useState(false);
@@ -29,6 +31,9 @@ export function PrFindingsCell({ pr }: { pr: PrMeta }) {
       onOpenChange={(open) => {
         if (open) setActive(true);
       }}
+      onFindingClick={(f) =>
+        router.push(`/repos/${repoId}/pulls/${pr.number}?tab=findings&finding=${f.id}`)
+      }
     >
       <SeverityCounts counts={counts} />
     </FindingsHoverCard>

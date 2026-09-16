@@ -95,6 +95,7 @@ export function RunHistory({
   headSha,
   onOpenTrace,
   onGoToReview,
+  onFindingClick,
   onDelete,
 }: {
   runs: RunSummary[];
@@ -109,6 +110,8 @@ export function RunHistory({
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
   onGoToReview?: (runId: string) => void;
+  /** Click a finding in a run's hover card → jump to it in the accordion below. */
+  onFindingClick?: (finding: FindingRecord) => void;
   onDelete?: (runId: string) => void;
 }) {
   const t = useTranslations("prReview");
@@ -207,6 +210,7 @@ export function RunHistory({
                     findings={runFindings}
                     repoFullName={repoFullName}
                     headSha={headSha}
+                    onFindingClick={onFindingClick}
                   >
                     <SeverityCounts counts={severityCounts(runFindings)} blockers={r.blockers} />
                   </FindingsHoverCard>
