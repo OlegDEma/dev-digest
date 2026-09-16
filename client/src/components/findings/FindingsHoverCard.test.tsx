@@ -87,4 +87,18 @@ describe("FindingsHoverCard", () => {
     fireEvent.keyDown(trigger, { key: "Escape" });
     expect(screen.queryByText("Secret key")).not.toBeInTheDocument();
   });
+
+  it("stays open while scrolling INSIDE the card, closes only on page scroll", () => {
+    const { trigger } = renderCard({ findings: [finding({ title: "Secret key" })] });
+    fireEvent.mouseEnter(trigger);
+    const card = screen.getByRole("dialog");
+
+    // Scrolling the card's own overflow must NOT dismiss it.
+    fireEvent.scroll(card);
+    expect(screen.getByText("Secret key")).toBeInTheDocument();
+
+    // A page scroll (fixed coords go stale) closes it.
+    fireEvent.scroll(window);
+    expect(screen.queryByText("Secret key")).not.toBeInTheDocument();
+  });
 });

@@ -34,6 +34,8 @@ const clampRationale = {
   lineHeight: 1.45,
   color: "var(--text-secondary)",
   margin: 0,
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
 } as React.CSSProperties;
 
 const s = {
@@ -44,6 +46,7 @@ const s = {
     maxWidth: "calc(100vw - 16px)",
     maxHeight: 360,
     overflowY: "auto",
+    overflowX: "hidden",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border-strong)",
     borderRadius: 9,
@@ -70,9 +73,28 @@ const s = {
     padding: "8px",
     borderTop: "1px solid var(--border)",
   } as React.CSSProperties,
-  titleRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } as React.CSSProperties,
-  title: { fontSize: 13, fontWeight: 600, color: "var(--text-primary)" } as React.CSSProperties,
-  metaRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } as React.CSSProperties,
+  titleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    minWidth: 0,
+  } as React.CSSProperties,
+  title: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-primary)",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  } as React.CSSProperties,
+  metaRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  } as React.CSSProperties,
   loading: {
     display: "flex",
     alignItems: "center",
@@ -109,6 +131,7 @@ export function FindingsHoverCard({
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLSpanElement>(null);
+  const cardRef = React.useRef<HTMLDivElement>(null);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelClose = React.useCallback(() => {
@@ -134,15 +157,24 @@ export function FindingsHoverCard({
     closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
   }, [cancelClose]);
 
-  // Fixed positioning goes stale on scroll/resize — just close then.
+  // Fixed positioning goes stale when the PAGE scrolls, so close then — but NOT
+  // when the user scrolls INSIDE the card itself (its own overflow), or the card
+  // would vanish the moment they try to read a long list.
   React.useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
+    const onScroll = (e: Event) => {
+      // e.target may be window/document (not a Node) on a page scroll — guard
+      // contains() so it never throws; only an in-card scroll keeps it open.
+      const target = e.target;
+      if (target instanceof Node && cardRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onResize = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -171,6 +203,7 @@ export function FindingsHoverCard({
       {children}
       {open && (
         <div
+          ref={cardRef}
           role="dialog"
           aria-label={t("timeline.findingsCount", { count: findings.length })}
           style={{ ...s.card, top: pos.top, left: pos.left }}
