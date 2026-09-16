@@ -80,9 +80,9 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
   uses. The server computes the list counts and the client re-derives the same set
   for the hover card (`currentFindings`); they reconcile only if both apply this
   exact rule — verified live: list `findings_by_severity` == severity-grouped
-  `/pulls/:id/reviews`. Evidence: `client/src/lib/findings.ts`,
-  `server/src/modules/pulls/routes.ts` (`findingsByPr` loop),
-  `server/test/pr-list-findings.it.test.ts`.
+  `/pulls/:id/reviews`. Evidence: `client/src/lib/findings.ts:51,73`
+  (`findingsByRun`/`currentFindings`), `server/src/modules/pulls/routes.ts:165`
+  (`findingsByPr`), `server/test/pr-list-findings.it.test.ts:114`.
 
 ## Tool & Library Notes
 

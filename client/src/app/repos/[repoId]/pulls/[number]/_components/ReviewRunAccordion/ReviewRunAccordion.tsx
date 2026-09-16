@@ -79,6 +79,8 @@ export function ReviewRunAccordion({
   }, [targetRunId, targetFindingId, targetNonce, review.run_id]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
+  const containsTarget =
+    targetFindingId != null && findings.some((f) => f.id === targetFindingId);
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
 
@@ -178,6 +180,8 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            targetFindingId={containsTarget ? targetFindingId : null}
+            targetNonce={targetNonce}
           />
         </div>
       )}

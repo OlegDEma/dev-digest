@@ -31,6 +31,8 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  targetFindingId,
+  targetNonce,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -39,9 +41,17 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** When a finding is the deep-link/click target, expand it (and collapse the
+   *  others in this panel) so the user lands on the one they clicked. */
+  targetFindingId?: string | null;
+  targetNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  React.useEffect(() => {
+    if (targetFindingId) setExpanded(targetFindingId === f.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFindingId, targetNonce]);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
     repoFullName && headSha

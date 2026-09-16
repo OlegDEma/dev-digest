@@ -40,8 +40,25 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
   navigate the row. The severity chip is the existing `SeverityBadge` with
   `compact`+`count` (colored icon + count, icons/colors from `SEV` in
   `vendor/ui/primitives/tokens.ts`) — reuse it, don't rebuild. Evidence:
-  `client/src/components/findings/`, `client/src/app/repos/[repoId]/pulls/styles.ts`
-  (`tableCard` overflow:hidden), `client/src/vendor/ui/primitives/Badge.tsx:52`.
+  `client/src/components/findings/FindingsHoverCard.tsx`,
+  `client/src/app/repos/[repoId]/pulls/styles.ts:91` (`tableCard` overflow:hidden),
+  `client/src/vendor/ui/primitives/Badge.tsx:52`.
+
+- **2026-09-16** — Deep-linking to a specific finding (hover card → the "Review
+  runs" accordion) spans several components and has two non-obvious gotchas. Flow:
+  the PR-list card navigates to `?tab=findings&finding=<id>`; `page.tsx` reads it →
+  `FindingsTab` turns it into a `{ findingId, nonce }` target (kept in STATE, not
+  the URL) threaded to every `ReviewRunAccordion`; the one that contains it opens,
+  scrolls to `[data-finding-id]` (~60ms after `open` flips, so the panel has
+  rendered) and passes the target into `FindingsPanel`/`FindingCard` so that card
+  expands and the others in that run collapse. **Gotcha 1:** `?finding=` must be
+  consumed ONCE and stripped, or reopening the tab re-scrolls every time —
+  `FindingsTab.onFindingConsumed` → `page.tsx` clears it. **Gotcha 2:** clear it
+  with `router.replace(url, { scroll: false })`; Next's default scroll-to-top
+  otherwise fires right after and fights the scroll-to-finding (symptom: lands at
+  the top, not the finding). Evidence: `FindingsTab.tsx:86,96` (handleGoToFinding +
+  onFindingConsumed), `page.tsx:161` (scroll:false), `ReviewRunAccordion.tsx:53` +
+  `FindingCard.tsx:52` (targetFindingId).
 
 ## Tool & Library Notes
 

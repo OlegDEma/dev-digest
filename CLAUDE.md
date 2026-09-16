@@ -70,6 +70,47 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   Postgres). Everything else must stay hermetic.
 - Secrets live in `~/.devdigest/secrets.json` (mode 0600) with `process.env` as
   fallback — never in git or the database.
+- **`pnpm typecheck` / `pnpm install` / `pnpm db:migrate` trip a supply-chain
+  build gate.** In `server/` + `client/` these abort with
+  `ERR_PNPM_IGNORED_BUILDS` before doing any work — run the tool binary directly
+  instead: `./node_modules/.bin/tsc --noEmit`, `./node_modules/.bin/vitest run`,
+  `./node_modules/.bin/tsx src/db/migrate.ts`. Evidence: `server/INSIGHTS.md`
+  → *Recurring Errors & Fixes*.
+- **CI is per-package (5 workflows); server tests run as two jobs.**
+  `.github/workflows/`: `server-unit.yml` (hermetic) and `server-integration.yml`
+  (`*.it.test.ts`, testcontainers Postgres, self-skips without Docker), plus
+  `client.yml`, `reviewer-core.yml`, `e2e-web.yml`. There is no root/aggregate
+  workflow. Evidence: `.github/workflows/`.
+
+### Naming
+
+- **Contract fields are `snake_case`; Drizzle is a `camelCase` property → a
+  `snake_case` column.** `@devdigest/shared` contracts (and the JSON the API
+  returns) use snake_case — `cost_usd`, `findings_by_severity`, `run_id`,
+  `start_line`; the Drizzle schema names a camelCase property mapped to a
+  snake_case column: `costUsd: doublePrecision('cost_usd')`,
+  `startLine: integer('start_line')`. The repo/route layer maps between the two
+  (`run.costUsd` → `cost_usd`). Mixing the two casings is the single most common
+  bug when you add a field. Evidence: `server/src/db/schema/*.ts`,
+  `server/src/modules/*/repository/*.ts`.
+- **Enum casing is per-enum, not uniform.** `Severity` is UPPERCASE
+  (`CRITICAL | WARNING | SUGGESTION`), `FindingCategory` is lowercase
+  (`bug | security | perf | style | test`); both persist as plain `text`, so the
+  Zod enum is the only guard — a wrong-case value fails validation, not the DB.
+  Evidence: `*/vendor/shared/contracts/findings.ts`.
+- **Contracts live in two hand-copied trees that drift.** Every schema exists in
+  BOTH `server/src/vendor/shared/` (canonical) and `client/src/vendor/shared/`
+  (copy) with no sync script — edit both, identically, in the same change.
+  Evidence: root [`INSIGHTS.md`](INSIGHTS.md) → *What Doesn't Work* (2026-07-29).
+- **Specs are `NN-slug.md` (2-digit prefix), written before the code.** Root
+  `specs/` for a feature spanning ≥2 packages; `<pkg>/specs/` for a single-package
+  one. Evidence: `specs/README.md`, `specs/01-run-cost-badge.md`.
+- **Commits follow Conventional Commits by example** (`feat(reviews): …`,
+  `fix(db): …`, `docs(insights): …`) — matched from history, not enforced by a
+  hook; branch names are freeform.
+- Client feature-folder naming (`_components/<PascalName>/` + `<Name>.test.tsx` +
+  `index.ts`) is documented in [`client/CLAUDE.md`](client/CLAUDE.md) — not
+  repeated here.
 
 ## Gotchas
 
@@ -88,6 +129,9 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
 - `**/src/vendor/**` — vendored. Exception: `vendor/shared` changes only as part
   of a deliberate contract change.
 - `**/node_modules/**`, `pnpm-lock.yaml`, `package-lock.json`.
+- `server/src/db/migrations/**` — **generated, do not hand-edit or hand-write.**
+  Change `server/src/db/schema.ts`, then `cd server && pnpm db:generate` to emit
+  the migration, and `pnpm db:migrate` to apply it.
 
 ## Read when
 
