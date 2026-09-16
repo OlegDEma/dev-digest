@@ -151,6 +151,16 @@ export default function PRDetailPage() {
             repoFullName={repoFullName}
             headSha={pr.head_sha}
             initialFindingId={initialFindingId}
+            onFindingConsumed={() => {
+              // Drop ?finding= WITHOUT Next's default scroll-to-top, or it would
+              // fight the accordion scrolling to the finding.
+              const sp = new URLSearchParams(search.toString());
+              sp.delete("finding");
+              router.replace(
+                `/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`,
+                { scroll: false },
+              );
+            }}
             cancelMutation={cancel}
             onOpenTrace={(id) => setParam("trace", id)}
             onDelete={(id) => {

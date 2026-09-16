@@ -24,6 +24,9 @@ interface FindingsTabProps {
   headSha?: string | null;
   /** ?finding=<id> from the URL (arriving from the PR list) → scroll to it once. */
   initialFindingId?: string | null;
+  /** Called after the initial ?finding= is consumed, so the page can drop it from
+   *  the URL — otherwise it re-scrolls every time this tab is reopened. */
+  onFindingConsumed?: () => void;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -41,6 +44,7 @@ export function FindingsTab({
   repoFullName,
   headSha,
   initialFindingId,
+  onFindingConsumed,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -83,11 +87,13 @@ export function FindingsTab({
     setTarget((p) => ({ findingId: finding.id, n: (p?.n ?? 0) + 1 }));
   }, []);
 
-  // Arriving from the PR list with ?finding=<id> → jump to that finding once it
-  // (and the reviews) are here. Re-fires only when the id in the URL changes.
+  // Arriving from the PR list with ?finding=<id> → jump to that finding once, then
+  // clear the URL param so reopening this tab doesn't scroll again. The target
+  // lives in state (not the URL), so clearing it doesn't cancel the pending jump.
   React.useEffect(() => {
     if (initialFindingId) {
       setTarget((p) => ({ findingId: initialFindingId, n: (p?.n ?? 0) + 1 }));
+      onFindingConsumed?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFindingId]);
