@@ -17,11 +17,16 @@ export function FindingsPanel({
   prId,
   repoFullName,
   headSha,
+  targetFindingId,
+  targetNonce,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** Finding to focus + expand (a deep-link/click landed on it). */
+  targetFindingId?: string | null;
+  targetNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -29,6 +34,14 @@ export function FindingsPanel({
   const [focusIdx, setFocusIdx] = React.useState(0);
 
   const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+
+  // Move the keyboard focus/highlight onto the targeted finding.
+  React.useEffect(() => {
+    if (!targetFindingId) return;
+    const idx = shown.findIndex((f) => f.id === targetFindingId);
+    if (idx >= 0) setFocusIdx(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFindingId, targetNonce]);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -63,7 +76,9 @@ export function FindingsPanel({
               key={f.id}
               f={f}
               focused={i === focusIdx}
-              defaultExpanded={i === 0}
+              defaultExpanded={targetFindingId ? f.id === targetFindingId : i === 0}
+              targetFindingId={targetFindingId}
+              targetNonce={targetNonce}
               pending={action.isPending}
               repoFullName={repoFullName}
               headSha={headSha}

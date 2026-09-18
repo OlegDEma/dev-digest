@@ -97,6 +97,15 @@ export class JobRunner {
       }
     }) as Promise<void>;
 
+    // A job that ultimately fails rejects `done` (the handler re-throws above so
+    // explicit awaiters — tests, callers that `await done` — still observe it).
+    // But fire-and-forget callers (repo add/refresh enqueue a clone and never
+    // await `done`) would otherwise leave that rejection unhandled, which crashes
+    // the whole process. The failure is already persisted to the `jobs` row, so
+    // attach a swallowing handler here to keep a background job failure (e.g. a
+    // clone of a repo that no longer exists) from taking down the API.
+    void done.catch(() => {});
+
     return { id: jobId, done };
   }
 

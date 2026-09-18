@@ -30,6 +30,7 @@ export function ReviewRunAccordion({
   repoFullName,
   headSha,
   targetRunId = null,
+  targetFindingId = null,
   targetNonce = 0,
 }: {
   review: ReviewRecord;
@@ -40,19 +41,46 @@ export function ReviewRunAccordion({
   /** When this matches review.run_id, the accordion opens and scrolls into view
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
+  /** When this review contains the finding, open + scroll to that finding card
+   *  (driven from a hover card: clicking a finding jumps here). */
+  targetFindingId?: string | null;
   targetNonce?: number;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
+    const hasFinding =
+      targetFindingId != null && review.findings.some((f) => f.id === targetFindingId);
+    if (hasFinding) {
+      setOpen(true);
+      const id = targetFindingId;
+      // `open` just flipped — wait a tick for the panel to render, then scroll to
+      // the specific finding card and flash it so the user sees which one.
+      const timer = setTimeout(() => {
+        const el = Array.from(
+          rootRef.current?.querySelectorAll<HTMLElement>("[data-finding-id]") ?? [],
+        ).find((n) => n.getAttribute("data-finding-id") === id);
+        (el ?? rootRef.current)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (el) {
+          el.style.transition = "box-shadow .2s ease";
+          el.style.boxShadow = "0 0 0 2px var(--accent)";
+          setTimeout(() => {
+            el.style.boxShadow = "";
+          }, 1200);
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
     if (review.run_id && review.run_id === targetRunId) {
       setOpen(true);
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetRunId, targetNonce, review.run_id]);
+  }, [targetRunId, targetFindingId, targetNonce, review.run_id]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
+  const containsTarget =
+    targetFindingId != null && findings.some((f) => f.id === targetFindingId);
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
 
@@ -152,6 +180,8 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            targetFindingId={containsTarget ? targetFindingId : null}
+            targetNonce={targetNonce}
           />
         </div>
       )}

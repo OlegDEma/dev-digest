@@ -6,6 +6,7 @@ import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
 import { s } from "./styles";
+import { findingsByRun } from "@/lib/findings";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
@@ -21,6 +22,11 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** ?finding=<id> from the URL (arriving from the PR list) → scroll to it once. */
+  initialFindingId?: string | null;
+  /** Called after the initial ?finding= is consumed, so the page can drop it from
+   *  the URL — otherwise it re-scrolls every time this tab is reopened. */
+  onFindingConsumed?: () => void;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -37,6 +43,8 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  initialFindingId,
+  onFindingConsumed,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -66,10 +74,34 @@ export function FindingsTab({
   // Timeline → Review-runs navigation: clicking an agent name in the timeline
   // opens + scrolls to that run's accordion below. The nonce re-triggers the
   // scroll even when the same run is clicked twice.
-  const [target, setTarget] = React.useState<{ runId: string; n: number } | null>(null);
+  const [target, setTarget] = React.useState<{
+    runId?: string;
+    findingId?: string;
+    n: number;
+  } | null>(null);
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+  // Clicking a finding in a timeline hover card jumps to it in the accordion.
+  const handleGoToFinding = useCallback((finding: FindingRecord) => {
+    setTarget((p) => ({ findingId: finding.id, n: (p?.n ?? 0) + 1 }));
+  }, []);
+
+  // Arriving from the PR list with ?finding=<id> → jump to that finding once, then
+  // clear the URL param so reopening this tab doesn't scroll again. The target
+  // lives in state (not the URL), so clearing it doesn't cancel the pending jump.
+  React.useEffect(() => {
+    if (initialFindingId) {
+      setTarget((p) => ({ findingId: initialFindingId, n: (p?.n ?? 0) + 1 }));
+      onFindingConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFindingId]);
+
+  // run_id → its findings, so each timeline run can show a severity breakdown +
+  // hover card. Findings live on the reviews (not the RunSummary rows), keyed to
+  // a run via reviews.run_id — see lib/findings.findingsByRun.
+  const findingsByRunMap = React.useMemo(() => findingsByRun(runs), [runs]);
 
   return (
     <section>
@@ -131,8 +163,12 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRun={findingsByRunMap}
+            repoFullName={repoFullName}
+            headSha={headSha}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
+            onFindingClick={handleGoToFinding}
             onDelete={handleDelete}
           />
         </div>
@@ -163,6 +199,7 @@ export function FindingsTab({
             repoFullName={repoFullName}
             headSha={headSha}
             targetRunId={target?.runId ?? null}
+            targetFindingId={target?.findingId ?? null}
             targetNonce={target?.n ?? 0}
           />
         ))
