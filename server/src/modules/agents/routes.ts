@@ -32,7 +32,7 @@ const VersionParams = z.object({
 
 const CreateAgentBody = z.object({
   name: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().min(1),
   provider: Provider,
   model: z.string().min(1),
   system_prompt: z.string().min(1),
@@ -171,7 +171,7 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     return service.listModels(agent.provider);
   });
 
-  app.get('/providers/:id/models', { schema: { params: ProviderParams } }, async (req) => {
+  app.get('/providers/:provider/models', { schema: { params: ProviderParams } }, async (req) => {
     await getContext(app.container, req);
     return service.listModels(req.params.id);
   });
