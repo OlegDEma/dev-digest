@@ -1,0 +1,65 @@
+{
+  "skill_name": "pr-self-review",
+  "description": "Trigger, precision, and recall checks for the pre-PR review gate. Run with the skill-creator loop (with-skill vs baseline). Fixtures are self-contained sample 'changed files' under evals/fixtures/.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "trigger-fires-on-pr-intent",
+      "prompt": "I think I'm done with these changes — let's open a pull request.",
+      "expected_output": "The pr-self-review skill triggers and runs the gate (collects the diff, runs Tier-1) BEFORE opening the PR, rather than going straight to `gh pr create`.",
+      "files": [],
+      "assertions": [
+        { "text": "Invokes/references pr-self-review before creating the PR", "kind": "qualitative" },
+        { "text": "Collects the diff (branch vs main + working tree) before deciding", "kind": "qualitative" },
+        { "text": "Does NOT call `gh pr create` before the gate result is known", "kind": "qualitative" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "trigger-skips-docs-only",
+      "prompt": "I only fixed a typo in README.md and updated a doc. Pushing this now.",
+      "expected_output": "Recognizes a docs-only diff and does NOT run the heavy review gate (negative trigger); at most a one-line note that there is nothing to gate.",
+      "files": [],
+      "assertions": [
+        { "text": "Does not spin up reviewer/verifier subagents for a docs-only change", "kind": "qualitative" },
+        { "text": "Does not block the push", "kind": "qualitative" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "recall-planted-critical",
+      "prompt": "Review my staged change before I open the PR. Changed file: evals/fixtures/planted-critical/pulls.routes.ts",
+      "expected_output": "BLOCKED. Names the onion violation (drizzle-orm imported/used directly in a route) as CRITICAL, and ideally the unvalidated req.query and snake_case/camelCase mismatch. Provides a concrete fix (move query to a repository; validate at the rim).",
+      "files": ["fixtures/planted-critical/pulls.routes.ts"],
+      "assertions": [
+        { "text": "Verdict is BLOCKED (>=1 confirmed CRITICAL)", "kind": "qualitative" },
+        { "text": "Flags Drizzle used directly in a route (onion-architecture) as CRITICAL", "kind": "qualitative" },
+        { "text": "Each CRITICAL is grounded: quotes the line + gives a failure scenario", "kind": "qualitative" },
+        { "text": "Suggests moving the query to a repository", "kind": "qualitative" }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "precision-false-positive-bait",
+      "prompt": "Review my staged change before I open the PR. Changed file: evals/fixtures/false-positive-bait/CopyButton.tsx",
+      "expected_output": "PASS (no CRITICAL). The icon-only button DOES have an aria-label (on the line after `<button`), and the fetch uses a server/config value, not attacker input — so neither is a real issue. At most a SUGGESTION.",
+      "files": ["fixtures/false-positive-bait/CopyButton.tsx"],
+      "assertions": [
+        { "text": "Does NOT raise a CRITICAL for missing aria-label (it is present)", "kind": "qualitative" },
+        { "text": "Does NOT raise a CRITICAL for the fetch (value is server-controlled config)", "kind": "qualitative" },
+        { "text": "Verdict is PASS or PASS WITH WARNINGS, not BLOCKED", "kind": "qualitative" }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "known-good-passes",
+      "prompt": "Review my staged change before I open the PR. Changed file: evals/fixtures/known-good/formatCost.ts",
+      "expected_output": "PASS. A pure, well-typed helper with no side effects — nothing to block on.",
+      "files": ["fixtures/known-good/formatCost.ts"],
+      "assertions": [
+        { "text": "Verdict is PASS (no CRITICAL, no WARNING)", "kind": "qualitative" },
+        { "text": "Does not invent findings on clean code", "kind": "qualitative" }
+      ]
+    }
+  ]
+}

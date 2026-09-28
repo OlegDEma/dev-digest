@@ -57,7 +57,11 @@ export class RipgrepCodeIndex implements CodeIndex {
   private grepWithRg(rg: string, root: string, pattern: string): Promise<CodeMatch[]> {
     return new Promise((resolve, reject) => {
       const matches: CodeMatch[] = [];
-      const proc = spawn(rg, ['--line-number', '--no-heading', '--color=never', pattern, root]);
+      // `-e` binds the pattern to an option and `--` ends flag parsing, so a
+      // pattern beginning with `-` can never be read as a flag. Without them a
+      // caller-supplied pattern like `--pre=CMD` becomes a ripgrep flag that
+      // runs an arbitrary preprocessor command on every searched file.
+      const proc = spawn(rg, ['--line-number', '--no-heading', '--color=never', '-e', pattern, '--', root]);
       let buf = '';
       proc.stdout.on('data', (d) => {
         buf += d.toString();

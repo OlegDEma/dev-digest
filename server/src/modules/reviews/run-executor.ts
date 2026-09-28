@@ -184,6 +184,13 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // Skills — the agent's bound + globally-enabled skills, in bound order.
+      // Each becomes one `### <name>` block of the `## Skills / rules` section.
+      // Not best-effort like repo-intel: skills are part of the agent's config,
+      // so a load failure fails the run rather than silently reviewing without
+      // them. An agent with none gets a prompt byte-identical to today's.
+      const skillBlocks = await this.buildSkillBlocks(agent.id, runId, runLog);
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -201,6 +208,9 @@ export class ReviewRunExecutor {
         ...(callersDigest ? { callers: callersDigest } : {}),
         // T3 — repo skeleton, same omit-when-empty contract.
         ...(repoMap ? { repoMap } : {}),
+        // Skills — resolved bodies (the engine never sees ids or slugs); the
+        // section is omitted when the list is empty.
+        ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -315,6 +325,39 @@ export class ReviewRunExecutor {
       this.container.runBus.complete(runId);
       throw err;
     }
+  }
+
+  /**
+   * Resolve the agent's skills into prompt blocks: bound to the agent AND
+   * globally enabled, in link order (`AgentsRepository.enabledSkillsForPrompt`).
+   * The `### <name>` header is added HERE, not in reviewer-core — the engine
+   * takes resolved strings, and the CI runner (resolving from the filesystem)
+   * formats identically. One Live Log line per skill with its token cost, so a
+   * bound skill is visible in the log and an unbound/disabled one is not. The
+   * same list is recorded in `agent_run_skills` (with the version that shaped
+   * the prompt) so the Stats tab can attribute this run to each skill.
+   */
+  private async buildSkillBlocks(agentId: string, runId: string, runLog: RunLogger): Promise<string[]> {
+    const linked = await this.agents.enabledSkillsForPrompt(agentId);
+    if (linked.length === 0) {
+      runLog.info('skills: none bound — the prompt has no "Skills / rules" section');
+      return [];
+    }
+    const blocks: string[] = [];
+    let total = 0;
+    for (const { skill } of linked) {
+      const block = `### ${skill.name}\n${skill.body.trim()}`;
+      const tokens = this.container.tokenizer.count(block);
+      total += tokens;
+      blocks.push(block);
+      runLog.info(`skill "${skill.name}" attached (v${skill.version}, ${skill.type}, ~${tokens} tokens)`);
+    }
+    runLog.info(`skills: ${blocks.length} attached — ~${total} tokens added to the prompt`);
+    await this.repo.recordRunSkills(
+      runId,
+      linked.map(({ skill }, position) => ({ skillId: skill.id, version: skill.version, position })),
+    );
+    return blocks;
   }
 
   /**

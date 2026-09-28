@@ -66,6 +66,8 @@ export const s = {
   promptDot: (color: string): CSSProperties => ({ width: 7, height: 7, borderRadius: 2, background: color }),
   promptLabel: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
   promptToggle: { marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  promptActions: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  promptExpand: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   promptPre: {
     margin: 0,
     padding: "12px 14px",
@@ -120,4 +122,18 @@ export const s = {
   tabBody: { paddingTop: 18 } satisfies CSSProperties,
   emptyNote: { fontSize: 13, color: "var(--text-muted)", padding: 16 } satisfies CSSProperties,
   noToolCalls: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+
+  // ---- FindingsSection ----
+  findingsList: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  findingCard: {
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    padding: "10px 12px",
+    background: "var(--bg-surface)",
+  } satisfies CSSProperties,
+  findingHead: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } satisfies CSSProperties,
+  findingTitle: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
+  findingLoc: { fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 } satisfies CSSProperties,
+  findingBody: { fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 } satisfies CSSProperties,
+  findingFix: { fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginTop: 6 } satisfies CSSProperties,
 } as const;

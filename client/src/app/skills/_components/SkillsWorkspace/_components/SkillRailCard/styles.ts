@@ -1,0 +1,58 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for SkillRailCard (the design's rail card). */
+export const s = {
+  card: (active: boolean, enabled: boolean): CSSProperties => ({
+    padding: 14,
+    borderRadius: 8,
+    cursor: "pointer",
+    border: "1px solid " + (active ? "var(--border-strong)" : "var(--border)"),
+    background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
+    opacity: enabled ? 1 : 0.6,
+    marginBottom: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  }),
+  headerRow: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  iconBox: (color: string, bg: string): CSSProperties => ({
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    background: bg,
+    color,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+  }),
+  name: {
+    fontSize: 13,
+    fontWeight: 600,
+    flex: 1,
+    minWidth: 0,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
+  description: {
+    fontSize: 13,
+    color: "var(--text-muted)",
+    lineHeight: 1.4,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } satisfies CSSProperties,
+  source: { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  divider: { height: 1, background: "var(--border)", margin: "2px 0" } satisfies CSSProperties,
+  statsRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" } satisfies CSSProperties,
+  accept: (known: boolean): CSSProperties => ({ color: known ? "var(--ok)" : "var(--text-muted)" }),
+  deleteBtn: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--text-muted)",
+    display: "inline-flex",
+    padding: 3,
+  } satisfies CSSProperties,
+} as const;

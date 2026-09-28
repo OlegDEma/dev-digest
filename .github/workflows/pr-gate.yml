@@ -1,0 +1,31 @@
+# pr-gate — the CI half of the pr-self-review skill. Verifies that a committed
+# review stamp matches the PR head and passed. No LLM, no secrets, contents:read.
+# Inert until `conventions` is made a required check on main (repo-admin action —
+# see the skill's README, "Making the Merge button obey"). In report-only mode
+# (the default in routing.md) it annotates and stays green.
+name: pr-gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: pr-self-review stamp check
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: node .claude/skills/pr-self-review/scripts/pr-gate-ci.mjs

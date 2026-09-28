@@ -63,7 +63,7 @@ A quirk/gotcha of a dependency.
 - ✅ `- **2026-09-15** — Migrations do **not** run on boot; `dev.sh` never calls
   `db:migrate`. A `relation ... does not exist` at startup means the step was
   skipped, not a schema bug — run `cd server && pnpm db:migrate`. Evidence:
-  `scripts/dev.sh`, root `CLAUDE.md` Gotchas.`
+  `scripts/dev.sh`, root `AGENTS.md` Gotchas.`
 
 ## Recurring Errors & Fixes
 
@@ -73,7 +73,7 @@ An error seen more than once + the exact fix.
 - ✅ `- **2026-09-15** — A run stuck in `running` after a crash is reaped on next
   server boot (the reaper marks orphaned runs failed) — it's a dead process, not
   a logic bug. Don't chase it in code; restart the server. Evidence: root
-  `CLAUDE.md` Gotchas; boot-time reaper.`
+  `AGENTS.md` Gotchas; boot-time reaper.`
 
 ## Session Notes (root only)
 

@@ -45,4 +45,7 @@ export const s = {
     display: "flex",
     gap: 8,
   } satisfies CSSProperties,
+  spinIcon: { color: "var(--accent)", animation: "ddspin 1s linear infinite" } satisfies CSSProperties,
+  shieldIcon: { color: "var(--crit)" } satisfies CSSProperties,
+  sectionRight: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
 } as const;

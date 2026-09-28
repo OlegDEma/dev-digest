@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -202,6 +202,32 @@ export class AgentsRepository {
   async skillIdsForAgent(agentId: string): Promise<string[]> {
     const links = await this.linkedSkills(agentId);
     return links.map((l) => l.skill.id);
+  }
+
+  /**
+   * The skills that actually shape this agent's prompt: bound to it AND
+   * globally enabled (`skills.enabled`), in link `order`. A bound-but-disabled
+   * skill is left out here, which is what makes the card toggle a kill-switch.
+   */
+  async enabledSkillsForPrompt(agentId: string): Promise<LinkedSkillRow[]> {
+    const rows = await this.db
+      .select({ skill: t.skills, order: t.agentSkills.order })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .where(and(eq(t.agentSkills.agentId, agentId), eq(t.skills.enabled, true)))
+      .orderBy(asc(t.agentSkills.order));
+    return rows.map((r) => ({ skill: r.skill, order: r.order }));
+  }
+
+  /** agent_id → number of bound skills, for every agent in the workspace with ≥1. */
+  async skillCounts(workspaceId: string): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ agentId: t.agentSkills.agentId, n: sql<number>`count(*)::int` })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .groupBy(t.agentSkills.agentId);
+    return new Map(rows.map((r) => [r.agentId, r.n]));
   }
 
   /** Link a skill to an agent at a given order (idempotent: upserts order). */

@@ -4,7 +4,8 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, Icon, Modal } from "@devdigest/ui";
+import { Badge, Button, Icon, Modal } from "@devdigest/ui";
+import { approxTokens, formatTokenCount } from "@/lib/format";
 import { s } from "../../styles";
 import { PromptModalBody } from "../PromptModalBody";
 
@@ -35,7 +36,12 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>
         <span style={s.promptDot(color)} />
         <span style={s.promptLabel}>{label}</span>
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Size hint per block (chars/4 — the client has no tokenizer), so the
+            cost of e.g. the skills block is visible next to its name. */}
+        <Badge color="var(--text-muted)" mono>
+          {t("trace.prompt.tokens", { count: formatTokenCount(approxTokens(text)) })}
+        </Badge>
+        <span style={s.promptActions}>
           <button
             type="button"
             title={t("trace.prompt.copy")}
@@ -60,7 +66,7 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
           >
             <Icon.ExternalLink size={12} />
           </button>
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          <span style={s.promptExpand}>
             {open ? t("trace.collapse") : t("trace.expand")}
           </span>
         </span>

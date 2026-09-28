@@ -1,0 +1,1 @@
+export { SkillEditorRoute } from "./SkillEditorRoute";

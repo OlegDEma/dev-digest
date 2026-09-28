@@ -32,3 +32,23 @@ export async function waitForPrRuns(
     await new Promise((r) => setTimeout(r, 25));
   }
 }
+
+/**
+ * The run row flips to `done` BEFORE its trace document is written
+ * (`completeAgentRun` → `saveRunTrace` in run-executor), so a test that reads
+ * `/runs/:id/trace` right after `waitForPrRuns` can race a 404 under load. Poll
+ * the route until the trace exists.
+ */
+export async function waitForRunTrace(
+  app: { inject: (opts: { method: 'GET'; url: string }) => Promise<{ statusCode: number; json: () => unknown }> },
+  runId: string,
+  timeoutMs = 10_000,
+): Promise<unknown> {
+  const start = Date.now();
+  for (;;) {
+    const res = await app.inject({ method: 'GET', url: `/runs/${runId}/trace` });
+    if (res.statusCode === 200) return res.json();
+    if (Date.now() - start > timeoutMs) throw new Error(`trace for run ${runId} not persisted within ${timeoutMs}ms`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}

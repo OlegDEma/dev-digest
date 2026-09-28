@@ -184,6 +184,23 @@ export async function saveRunTrace(db: Db, runId: string, trace: RunTrace): Prom
     .onConflictDoUpdate({ target: t.runTraces.runId, set: { trace } });
 }
 
+/**
+ * Record which skills entered a run's prompt (`agent_run_skills`), in block
+ * order. Idempotent per (run, skill) — a re-run of the same run id keeps one row
+ * per skill. Empty list → no rows (the run had no skills), nothing to delete.
+ */
+export async function recordRunSkills(
+  db: Db,
+  runId: string,
+  skills: { skillId: string; version: number; position: number }[],
+): Promise<void> {
+  if (skills.length === 0) return;
+  await db
+    .insert(t.agentRunSkills)
+    .values(skills.map((s) => ({ runId, skillId: s.skillId, skillVersion: s.version, position: s.position })))
+    .onConflictDoNothing();
+}
+
 export async function getRunTrace(db: Db, runId: string): Promise<RunTrace | undefined> {
   const [row] = await db.select().from(t.runTraces).where(eq(t.runTraces.runId, runId));
   return row ? (row.trace as RunTrace) : undefined;

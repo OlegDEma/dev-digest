@@ -63,7 +63,7 @@ a hover popover.
 | `PrMeta` | add `findings_by_severity: { CRITICAL, WARNING, SUGGESTION } \| null` (nullish — absent until reviewed) | `server/src/vendor/shared/contracts/platform.ts` **and** `client/src/vendor/shared/contracts/platform.ts` |
 
 > ⚠️ **Drift:** the two `vendor/shared` trees are hand-copied and have no sync
-> script — apply the identical edit to **both**. (`client/CLAUDE.md`, root
+> script — apply the identical edit to **both**. (`client/AGENTS.md`, root
 > `INSIGHTS.md`.)
 
 No change to `RunSummary`/`FindingRecord`: the timeline reads findings from

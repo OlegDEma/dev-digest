@@ -68,6 +68,13 @@ cd server && pnpm exec vitest run --exclude '**/*.it.test.ts'   # unit, no Docke
 cd server && pnpm exec vitest run .it.test                      # integration, needs Docker
 cd server && pnpm test                                          # both
 
+# server integration WITHOUT Docker (e.g. a Homebrew Postgres): point the fixture
+# at a throwaway database — it migrates + seeds it and skips testcontainers. The
+# files share that one DB, so run them serially; never use the dev DB here.
+createdb devdigest_test
+cd server && TEST_DATABASE_URL=postgres://devdigest:devdigest@localhost:5432/devdigest_test \
+  pnpm exec vitest run .it.test --no-file-parallelism
+
 # browser e2e (needs the full stack + agent-browser CLI)
 ./scripts/dev.sh
 npm i -g agent-browser && agent-browser install

@@ -183,4 +183,12 @@ export class ReviewRepository {
   getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return runRepo.getRunTrace(this.db, runId);
   }
+
+  /** Which skills entered a run's prompt, in block order (Stats attribution). */
+  recordRunSkills(
+    runId: string,
+    skills: { skillId: string; version: number; position: number }[],
+  ): Promise<void> {
+    return runRepo.recordRunSkills(this.db, runId, skills);
+  }
 }

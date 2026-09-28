@@ -159,14 +159,19 @@ export interface RepoIntel {
    * T2/T3: persistent `references.decl_file IS NULL`.
    */
   getUnresolvedReferences(repoId: string, files: string[]): Promise<RefRow[]>;
-  /** Top-N file paths by rank, filtered of tests/configs. */
-  getConventionSamples(repoId: string, n: number): Promise<string[]>;
+  /**
+   * Top-N file paths by rank, filtered of tests/configs. `includeTests` keeps
+   * test files in: the default filter is right for review context and wrong for
+   * convention extraction, where testing conventions are among the most useful
+   * rules (specs/04-conventions.md §5.1).
+   */
+  getConventionSamples(repoId: string, n: number, opts?: { includeTests?: boolean }): Promise<string[]>;
 
   // --- T3: onboarding reading-path + critical paths (graph required) ------
   getTopFilesByRank(
     repoId: string,
     n: number,
-    opts?: { exclude?: string[] },
+    opts?: { exclude?: string[]; includeTests?: boolean },
   ): Promise<string[]>;
   getCriticalPaths(repoId: string): Promise<string[][]>;
 }

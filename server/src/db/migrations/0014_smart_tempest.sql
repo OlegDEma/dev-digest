@@ -1,0 +1,2 @@
+ALTER TABLE "conventions" ADD CONSTRAINT "conventions_category_ck" CHECK ("conventions"."category" in ('naming','imports','error-handling','testing','structure','typing','async','styling'));--> statement-breakpoint
+ALTER TABLE "conventions" ADD CONSTRAINT "conventions_status_ck" CHECK ("conventions"."status" in ('pending','accepted','rejected'));
