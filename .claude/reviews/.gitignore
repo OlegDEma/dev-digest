@@ -1,0 +1,4 @@
+# Per-run verbose reports are local scratch; the stamp (*.stamp.json) is committed
+# with the PR — that is what CI (pr-gate.yml) validates. This .gitignore also keeps
+# the directory present in a fresh clone.
+*.report.md

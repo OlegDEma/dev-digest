@@ -78,7 +78,7 @@ for cost on other tables (`ci.ts:23`, `eval.ts:34`):
 costUsd: doublePrecision('cost_usd'),   // nullable; import doublePrecision from drizzle-orm/pg-core
 ```
 
-Migration is **generated, never hand-written** (server CLAUDE.md):
+Migration is **generated, never hand-written** (server AGENTS.md):
 `cd server && pnpm db:generate` → produces `0010_*.sql`
 (`ALTER TABLE "agent_runs" ADD COLUMN "cost_usd" double precision;`), then
 `pnpm db:migrate` (migrations do **not** run on boot).

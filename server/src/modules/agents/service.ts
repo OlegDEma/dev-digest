@@ -55,9 +55,13 @@ export class AgentsService {
     this.repo = new AgentsRepository(container.db);
   }
 
+  /** Every agent, decorated with how many skills it binds (for the list cards). */
   async list(workspaceId: string): Promise<Agent[]> {
-    const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    const [rows, counts] = await Promise.all([
+      this.repo.list(workspaceId),
+      this.repo.skillCounts(workspaceId),
+    ]);
+    return rows.map((row) => ({ ...toAgentDto(row), skill_count: counts.get(row.id) ?? 0 }));
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {

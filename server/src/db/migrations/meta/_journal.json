@@ -78,6 +78,34 @@
       "when": 1789503884301,
       "tag": "0010_short_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790017858814,
+      "tag": "0011_thin_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790161138602,
+      "tag": "0012_bent_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790161142909,
+      "tag": "0013_clear_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790161159842,
+      "tag": "0014_smart_tempest",
+      "breakpoints": true
     }
   ]
 }

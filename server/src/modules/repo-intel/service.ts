@@ -626,9 +626,17 @@ export class RepoIntelService implements RepoIntel {
     return out;
   }
 
-  /** Top-N files by rank, minus tests/configs/migrations — conventions sample. */
-  async getConventionSamples(repoId: string, n: number): Promise<string[]> {
-    return this.getTopFilesByRank(repoId, n);
+  /**
+   * Top-N files by rank, minus tests/configs/migrations — conventions sample.
+   * `includeTests` keeps test files in for the conventions extractor, which
+   * wants them (specs/04-conventions.md §5.1).
+   */
+  async getConventionSamples(
+    repoId: string,
+    n: number,
+    opts?: { includeTests?: boolean },
+  ): Promise<string[]> {
+    return this.getTopFilesByRank(repoId, n, opts);
   }
 
   /**
@@ -639,7 +647,7 @@ export class RepoIntelService implements RepoIntel {
   async getTopFilesByRank(
     repoId: string,
     n: number,
-    opts?: { exclude?: string[] },
+    opts?: { exclude?: string[]; includeTests?: boolean },
   ): Promise<string[]> {
     if (!this.container.config.repoIntelEnabled) return [];
     if (n <= 0) return [];
@@ -647,7 +655,7 @@ export class RepoIntelService implements RepoIntel {
     const rows = await this.repo.getRankedPaths(repoId, Math.max(n * 10, 100));
     const out: string[] = [];
     for (const r of rows) {
-      if (isJunkPath(r.path)) continue;
+      if (isJunkPath(r.path, opts?.includeTests)) continue;
       if (exclude.some((e) => r.path.includes(e))) continue;
       out.push(r.path);
       if (out.length >= n) break;
@@ -710,6 +718,16 @@ const CRITICAL_PATH_ROOTS = 5;
  * tests, configs, declaration files, migrations, generated dirs. Substring
  * match on the repo-relative path (kept deliberately simple + deterministic).
  */
+/** The subset of JUNK_PATH_PATTERNS that identifies tests, lifted when a caller
+ *  asks for them (conventions extraction). */
+const TEST_PATH_PATTERNS: ReadonlySet<string> = new Set([
+  '.test.',
+  '.spec.',
+  '__tests__/',
+  '/test/',
+  '/tests/',
+]);
+
 const JUNK_PATH_PATTERNS = [
   '.test.',
   '.spec.',
@@ -727,9 +745,12 @@ const JUNK_PATH_PATTERNS = [
   'prettier',
 ] as const;
 
-function isJunkPath(path: string): boolean {
+function isJunkPath(path: string, includeTests = false): boolean {
   const lower = path.toLowerCase();
-  return JUNK_PATH_PATTERNS.some((p) => lower.includes(p));
+  const patterns = includeTests
+    ? JUNK_PATH_PATTERNS.filter((p) => !TEST_PATH_PATTERNS.has(p))
+    : JUNK_PATH_PATTERNS;
+  return patterns.some((p) => lower.includes(p));
 }
 
 /** Enclosing top-level (bare-name) symbol for a line, from persistent rows. */

@@ -11,12 +11,20 @@ import type { ReviewRecord, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
+import { s } from "./styles";
 
 const VERDICT_COLOR: Record<string, string> = {
   request_changes: "var(--crit)",
   comment: "var(--warn)",
   approve: "var(--ok)",
 };
+
+/** Delay after opening the panel before scrolling to the target finding — lets
+ *  the just-rendered FindingsPanel commit to the DOM first. Covered by e2e, not
+ *  unit tests; see client/INSIGHTS.md → Codebase Patterns. */
+const SCROLL_SETTLE_MS = 60;
+/** How long the target finding stays ring-highlighted after the jump. */
+const FLASH_MS = 1200;
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -66,9 +74,9 @@ export function ReviewRunAccordion({
           el.style.boxShadow = "0 0 0 2px var(--accent)";
           setTimeout(() => {
             el.style.boxShadow = "";
-          }, 1200);
+          }, FLASH_MS);
         }
-      }, 60);
+      }, SCROLL_SETTLE_MS);
       return () => clearTimeout(timer);
     }
     if (review.run_id && review.run_id === targetRunId) {
@@ -88,14 +96,7 @@ export function ReviewRunAccordion({
     <div
       ref={rootRef}
       id={review.run_id ? `review-run-${review.run_id}` : undefined}
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        background: "var(--bg-surface)",
-        marginBottom: 14,
-        overflow: "hidden",
-        scrollMarginTop: 16,
-      }}
+      style={s.root}
     >
       <div
         role="button"
@@ -104,34 +105,26 @@ export function ReviewRunAccordion({
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") setOpen((o) => !o);
         }}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "13px 16px",
-          cursor: "pointer",
-          color: "var(--text-primary)",
-        }}
+        style={s.header}
       >
-        <Icon.Cpu size={15} style={{ color: "var(--text-muted)" }} />
-        <span style={{ fontWeight: 600, fontSize: 14 }}>{review.agent_name ?? "Agent"}</span>
+        <Icon.Cpu size={15} style={s.cpuIcon} />
+        <span style={s.agentName}>{review.agent_name ?? "Agent"}</span>
         {review.verdict && (
           <Badge color={verdictColor} bg="transparent">
             {review.verdict.replace("_", " ")}
           </Badge>
         )}
-        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+        <span style={s.meta}>
           {findings.length} finding{findings.length === 1 ? "" : "s"}
           {blockers > 0 ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
         </span>
-        <span style={{ flex: 1 }} />
+        <span style={s.spacer} />
         {review.score != null && (
           <Badge mono color="var(--text-secondary)">
             {review.score}
           </Badge>
         )}
-        <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        <span className="mono" style={s.when}>
           {formatWhen(review.created_at)}
         </span>
         <button
@@ -144,27 +137,20 @@ export function ReviewRunAccordion({
           disabled={del.isPending}
           title="Delete this review run"
           aria-label="Delete this review run"
-          style={{
-            background: "none",
-            border: "none",
-            cursor: del.isPending ? "not-allowed" : "pointer",
-            color: "var(--text-muted)",
-            display: "inline-flex",
-            padding: 4,
-          }}
+          style={{ ...s.delBtn, cursor: del.isPending ? "not-allowed" : "pointer" }}
         >
           <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
         </button>
         <Icon.ChevronDown
           size={16}
-          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s", color: "var(--text-muted)" }}
+          style={{ ...s.chevron, transform: open ? "rotate(180deg)" : "none" }}
         />
       </div>
 
       {open && (
-        <div style={{ padding: "0 16px 16px" }}>
+        <div style={s.body}>
           {review.verdict && (
-            <div style={{ marginBottom: 16 }}>
+            <div style={s.bannerWrap}>
               <VerdictBanner
                 verdict={review.verdict as Verdict}
                 summary={review.summary}

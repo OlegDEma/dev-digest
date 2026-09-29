@@ -67,4 +67,8 @@ export const s = {
     fontSize: 12.5,
     color: "var(--text-muted)",
   } satisfies CSSProperties,
+  branchIcon: { color: "var(--text-muted)" } satisfies CSSProperties,
+  addText: { color: "var(--code-add-text)" } satisfies CSSProperties,
+  delText: { color: "var(--code-del-text)" } satisfies CSSProperties,
+  warnIcon: { color: "var(--warn)", flexShrink: 0 } satisfies CSSProperties,
 } as const;

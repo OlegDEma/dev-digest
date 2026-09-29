@@ -1,0 +1,30 @@
+{
+  "branch": "main",
+  "base": "main",
+  "note": "working-tree diff vs main (no feature branch checked out)",
+  "verdict": "PASS",
+  "counts": { "critical": 0, "warning": 0, "suggestion": 0 },
+  "scope": {
+    "reviewed": 23,
+    "excluded": 26,
+    "buckets": ["frontend"]
+  },
+  "tier1": {
+    "tsc": "pass",
+    "vitest": "pass",
+    "next_build": "pass",
+    "arch_check": "not_wired"
+  },
+  "tripwires": {
+    "T1_contract_drift": "n/a",
+    "T2_snake_camel": "clean",
+    "T3_enum_casing": "clean",
+    "T4_schema_migration": "n/a",
+    "T5_route_authz": "n/a",
+    "T6_supply_chain_cmd": "clean",
+    "T7_destructive_reset": "n/a",
+    "T8_committed_secret": "clean",
+    "T9_wrong_pkg_manager": "n/a"
+  },
+  "findings": []
+}

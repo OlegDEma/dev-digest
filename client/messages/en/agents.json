@@ -1,7 +1,11 @@
 {
   "card": {
     "noDescription": "No description",
-    "skillCount": "{count} skills"
+    "skillCount": "{count, plural, one {# skill} other {# skills}}",
+    "delete": "Delete agent",
+    "deleteTitle": "Delete agent \"{name}\"?",
+    "deleteBody": "Its config, version history and skill bindings are removed with it. This cannot be undone.",
+    "deleteCancel": "Cancel"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -91,7 +95,20 @@
     "title": "Skills",
     "enabledCount": "{linked} of {total} enabled",
     "filterPlaceholder": "Filter skills…",
-    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach."
+    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Tick to bind; drag or use the arrows to reorder.",
+    "loadError": "Could not load skills.",
+    "emptyTitle": "No skills in this workspace",
+    "emptyBody": "Create or import one on the Skills page, then bind it here.",
+    "emptyCta": "Go to Skills",
+    "noMatch": "No skills match this filter.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "dragHandle": "Drag to reorder",
+    "bind": "Bind {name}",
+    "disabledBadge": "disabled",
+    "disabledTitle": "Disabled on the Skills page — bound, but left out of the prompt",
+    "saving": "Saving…",
+    "savedToast": "Skills updated ({count} bound)"
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

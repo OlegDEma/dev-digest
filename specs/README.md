@@ -8,4 +8,4 @@ that package's own `specs/` (e.g. [`../server/specs/`](../server/specs/)) instea
 Not to be confused with [`../e2e/specs/`](../e2e/specs/), which holds
 `*.flow.json` browser-flow definitions — a different thing entirely.
 
-> Stub — no specs yet.
+Current specs: [`01-run-cost-badge.md`](01-run-cost-badge.md) · [`02-findings-on-timeline.md`](02-findings-on-timeline.md) · [`03-skills.md`](03-skills.md) · [`04-conventions.md`](04-conventions.md).

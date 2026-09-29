@@ -11,7 +11,7 @@ The project's compounding memory. `INSIGHTS.md` files capture findings that are
 **true about this code but not visible in it** — so the next session starts
 knowing what this one learned instead of re-deriving it.
 
-The loop is already wired in the root `CLAUDE.md`: agents *read* the relevant
+The loop is already wired in the root `AGENTS.md`: agents *read* the relevant
 `INSIGHTS.md` before work and *run this skill* after. This skill is the "record"
 and "recall" engine — it routes to the right file, holds the format, and enforces
 the quality bar.
@@ -121,7 +121,7 @@ a good/bad pair per section, in this repo's own terms.
   and dated.
 - **One subject, one entry.** Dedup before writing (step 3).
 - **Don't let a file bloat.** Past ~200 entries the signal-to-noise ratio drops.
-  Then split by domain (`INSIGHTS-<domain>.md`, referenced from `CLAUDE.md`) or
+  Then split by domain (`INSIGHTS-<domain>.md`, referenced from `AGENTS.md`) or
   prune entries whose code was deleted/refactored. A periodic (≈quarterly) human
   review keeps it a curated draft, not an append-only landfill — the wrap-up does
   ~90%, a human spot-checks the rest.
@@ -136,7 +136,7 @@ timestamped snapshots — re-verify anything load-bearing before you build on it
 
 ## Automation (optional, not installed)
 
-Triggering here is by this skill's description, the `CLAUDE.md` "After finishing"
+Triggering here is by this skill's description, the `AGENTS.md` "After finishing"
 reminder, and manual `/engineering-insights`. That's deliberate: auto-firing at
 session end is unreliable on its own. The reliable-but-heavier upgrade is a `Stop`
 hook that runs a capture script on session end — see `references.md` for the
