@@ -281,7 +281,7 @@ export type Provider = z.infer<typeof Provider>;
 //  - single-pass: send the WHOLE diff in ONE model call (default)
 //  - map-reduce:  one model call PER changed file (for very large diffs)
 //  - auto:        single-pass, switching to map-reduce when the diff is large
-export const ReviewStrategy = z.enum(['single-pass', 'map-reduce', 'auto']);
+export const ReviewStrategy = z.enum(['single-pass', 'map-reduce']);
 export type ReviewStrategy = z.infer<typeof ReviewStrategy>;
 
 // CI gate policy — when a review should BLOCK (REQUEST_CHANGES + fail the check)
