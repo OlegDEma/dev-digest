@@ -130,6 +130,11 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
 - `server/clones/**` — cloned user repos, including a full copy of dev-digest
   itself. **Always exclude it from grep and glob** or you will read and edit the
   wrong file. Gitignored; never commit its contents.
+- `.claude/worktrees/**` — local Claude Code worktrees, each a full, stale copy
+  of the repo (extra `INSIGHTS.md` files, agents, specs). **Always exclude it
+  from grep and glob.** A default `rg` skips it (a hidden directory), but `find`,
+  `ls`, `Read` by path and `rg --hidden --no-ignore` do not. Listed in
+  `.git/info/exclude`; never commit its contents.
 - `**/src/vendor/**` — vendored. Exception: `vendor/shared` changes only as part
   of a deliberate contract change.
 - `**/node_modules/**`, `pnpm-lock.yaml`, `package-lock.json`.

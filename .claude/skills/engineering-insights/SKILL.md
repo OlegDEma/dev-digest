@@ -35,8 +35,8 @@ names a date: verify a file/flag/limit it cites still exists before acting on it
    a deliberate trade-off — record it *then*, before it is buried by the next
    step.
 
-If nothing cleared the quality bar below, record nothing and say so. That is a
-valid outcome.
+If nothing cleared the quality bar below, record nothing and say so — then still
+run step 8 with `none`. That is a valid outcome.
 
 ## Record — the workflow
 
@@ -69,6 +69,12 @@ valid outcome.
    rewrite existing entries).
 7. **Report** which file/section you wrote to, in one line. The entry ships with
    the change it documents (same commit/PR); it is versioned in git on purpose.
+8. **Ledger (wrap-up only).** At trigger 1, after step 7 or after deciding to
+   record nothing: run `scripts/ledger.sh record <module> <recorded|none>`
+   (module = the routing target of step 2, `root` for the root file), then
+   `scripts/ledger.sh status`, and put the status line verbatim in your one-line
+   report. Mid-task captures (trigger 2) never touch the ledger. The script
+   decides when curation is due; do not count yourself.
 
 ## Format (match the existing files exactly)
 

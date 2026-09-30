@@ -8,7 +8,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 |-------|-------|-------------|
 | [pr-self-review](pr-self-review/SKILL.md) `v1.0.0` | Workflow | Local pre-PR merge gate — routes the diff to the other skills, runs `tsc`/tests/tripwires, adversarially verifies each CRITICAL, stamps the verdict; blocks the PR on a confirmed one (ships report-only) |
 | [engineering-insights](engineering-insights/SKILL.md) | Workflow | Record & recall durable insights in each module's `INSIGHTS.md` — dated, append-only, Evidence-cited |
-| [onion-architecture](onion-architecture/SKILL.md) | Backend | Onion/hexagonal ring boundaries for `server/` + `reviewer-core/` — inward-only deps, Drizzle in repos, I/O via ports, enforced by `arch:check` |
+| [onion-architecture](onion-architecture/SKILL.md) | Backend | Onion/hexagonal ring boundaries for `server/` + `reviewer-core/` — inward-only deps, Drizzle in repos, I/O via ports — reviewer-enforced, no `arch:check` script exists yet |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |

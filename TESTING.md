@@ -35,8 +35,9 @@ If a test wouldn't catch a class of regression we care about, we don't write it.
 ## What each suite covers
 
 **client** — components render and react to interaction (React Testing Library
-+ jsdom). `fetch` is mocked; no API, DB, or browser. Covers the PR-review
-surface (list, diff, findings, run controls) and the agent editor.
++ jsdom). The `lib/hooks/*` data-hook module is mocked (`vi.mock`), not
+`fetch`; no API, DB, or browser. Covers the PR-review surface (list, diff,
+findings, run controls) and the agent editor.
 
 **server-unit** — the DB-free majority: adapters, prompt assembly, grounding,
 repo-intel ranking & indexing, pricing, route smoke. The `typecheck` job also
