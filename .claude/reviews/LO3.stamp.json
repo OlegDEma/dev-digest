@@ -2,8 +2,8 @@
   "skill": "pr-self-review",
   "version": "1.0.0",
   "base": "main",
-  "head": "99df0ed448fc667bfa1256c72b7ca7f4fa261196",
-  "worktree": "2f4f930650f5f95ee79054bde3a82327395962e1bf7df62e0de30c63dc1009e6",
+  "head": "47b719fb18909f9643d054cca3d0725fbeb96bbe",
+  "worktree": "clean",
   "mode": "report-only",
   "verdict": "warn",
   "counts": {
@@ -12,5 +12,5 @@
     "suggestion": 7
   },
   "waivers": [],
-  "generated_at": "2026-09-30T09:04:53.006Z"
+  "generated_at": "2026-09-30T09:06:00.584Z"
 }
