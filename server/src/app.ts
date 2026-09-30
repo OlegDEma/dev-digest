@@ -15,6 +15,7 @@ import { loadConfig, type AppConfig } from './platform/config.js';
 import { createDb, type Db } from './db/client.js';
 import { Container, type ContainerOverrides } from './platform/container.js';
 import { AppError } from './platform/errors.js';
+import { LOG_REDACT } from './platform/log-redact.js';
 import { modules } from './modules/index.js';
 import { ReviewService } from './modules/reviews/service.js';
 
@@ -52,12 +53,17 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         ? false
         : {
             level: config.logLevel,
+            redact: LOG_REDACT,
             transport:
               config.nodeEnv === 'development'
                 ? { target: 'pino-pretty', options: { colorize: true } }
                 : undefined,
           },
   });
+
+  if (config.promptLog.downgradeReason) {
+    app.log.warn({ event: 'prompt_log.downgraded' }, config.promptLog.downgradeReason);
+  }
 
   // Use zod schemas directly for request validation + response serialization.
   // Routes opt in per-module via `app.withTypeProvider<ZodTypeProvider>()`.

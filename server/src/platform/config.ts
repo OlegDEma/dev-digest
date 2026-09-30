@@ -36,7 +36,15 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // off | summary | verbose. Empty/unset = summary. `verbose` only takes effect
+  // with NODE_ENV=development and CI unset (see resolvePromptLog).
+  PROMPT_LOG: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.enum(['off', 'summary', 'verbose']).optional(),
+  ),
 });
+
+export type PromptLogMode = 'off' | 'summary' | 'verbose';
 
 export type AppConfig = {
   databaseUrl: string;
@@ -59,7 +67,33 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** Structured `prompt.assembled` logging: what was asked for vs what is in force. */
+  promptLog: {
+    requested: PromptLogMode;
+    effective: PromptLogMode;
+    downgradeReason: string | null;
+  };
 };
+
+/**
+ * `verbose` is a guard against accidental enablement (CI, production), not a
+ * security boundary: verbose output is content-free by construction.
+ */
+export function resolvePromptLog(
+  requested: PromptLogMode | undefined,
+  nodeEnv: AppConfig['nodeEnv'],
+  ci: string | undefined,
+): AppConfig['promptLog'] {
+  const req = requested ?? 'summary';
+  if (req === 'verbose' && (nodeEnv !== 'development' || (ci ?? '') !== '')) {
+    return {
+      requested: req,
+      effective: 'summary',
+      downgradeReason: 'PROMPT_LOG=verbose ignored: requires NODE_ENV=development and CI unset',
+    };
+  }
+  return { requested: req, effective: req, downgradeReason: null };
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.parse(env);
@@ -77,5 +111,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    promptLog: resolvePromptLog(parsed.PROMPT_LOG, parsed.NODE_ENV, env.CI),
   };
 }

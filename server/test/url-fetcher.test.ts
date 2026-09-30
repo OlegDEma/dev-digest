@@ -23,6 +23,9 @@ describe('isPrivateAddress', () => {
       'fc00::1',
       'fe80::1',
       '::ffff:127.0.0.1', // IPv4-mapped loopback
+      '::ffff:7f00:1', // same, as WHATWG URL serialises it
+      '::ffff:a9fe:a9fe', // mapped 169.254.169.254 metadata
+      '::a00:1', // IPv4-compatible 10.0.0.1
     ]) {
       expect(isPrivateAddress(ip), ip).toBe(true);
     }

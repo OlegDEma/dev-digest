@@ -136,3 +136,95 @@ describe('reviewPullRequest (engine)', () => {
     expect(seen.every((s) => s === 'sess-abc')).toBe(true);
   });
 });
+
+describe('reviewPullRequest — intent scope cap', () => {
+  const f = (id: string, severity: string, title: string, confidence: number) => ({
+    id, severity, category: 'bug', title, file: 'src/config.ts', start_line: 11, end_line: 11,
+    rationale: 'r', confidence, kind: 'finding',
+  });
+  const intent = {
+    summary: 's', in_scope: [], out_of_scope: [], risk_areas: [], missing_context: [], confidence: 'high' as const,
+  };
+  const review = {
+    verdict: 'comment', summary: 's', score: 50,
+    findings: [
+      f('a', 'WARNING', 'Out of scope: minor thing', 0.9),
+      f('b', 'CRITICAL', 'Out of scope: big thing', 0.5),
+      f('c', 'SUGGESTION', 'Out of scope: nit', 0.99),
+      f('d', 'WARNING', 'In scope defect', 0.7),
+    ],
+  };
+
+  it('keeps the highest-severity single Out of scope finding, drops suggestions', async () => {
+    const llm = new MockLLMProvider('openai', { structured: review });
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, intent });
+    expect(outcome.review.findings.map((x) => x.id).sort()).toEqual(['b', 'd']);
+    // collapsed, not hidden: the WARNING it absorbed is listed on the signal finding
+    const signal = outcome.review.findings.find((x) => x.id === 'b')!;
+    expect(signal.rationale).toContain('Also out of scope (1)');
+    expect(signal.rationale).toContain('[WARNING] minor thing — `src/config.ts:11`');
+    expect(signal.rationale).not.toContain('nit');
+    expect(outcome.assembly.intent).toContain('Summary: s');
+  });
+
+  it('does not cap without an intent', async () => {
+    const llm = new MockLLMProvider('openai', { structured: review });
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm });
+    expect(outcome.review.findings).toHaveLength(4);
+  });
+});
+
+describe('reviewPullRequest — onPromptAssembled hook', () => {
+  const clean = { verdict: 'approve', summary: 'ok', score: 100, findings: [] };
+  const twoFileDiff = async () => {
+    const base = await new MockGitClient().diff();
+    const file = base.files[0]!;
+    return {
+      ...base,
+      files: [file, { ...file, path: 'src/other.ts' }],
+    };
+  };
+
+  it('fires once in single-pass, before the LLM call', async () => {
+    const llm = new MockLLMProvider('openai', { structured: clean });
+    const diff = await new MockGitClient().diff();
+    const seen: { calls: number; idx: number; count: number }[] = [];
+    await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff, llm,
+      onPromptAssembled: (p) =>
+        seen.push({ calls: llm.calls.length, idx: p.chunkIndex, count: p.chunkCount }),
+    });
+    expect(seen).toEqual([{ calls: 0, idx: 0, count: 1 }]);
+  });
+
+  it('fires once per chunk in map-reduce, each before its LLM call', async () => {
+    const llm = new MockLLMProvider('openai', { structured: clean });
+    const diff = await twoFileDiff();
+    const seen: { calls: number; idx: number; count: number; label: string }[] = [];
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff, llm, strategy: 'map-reduce',
+      onPromptAssembled: (p) =>
+        seen.push({ calls: llm.calls.length, idx: p.chunkIndex, count: p.chunkCount, label: p.chunkLabel }),
+    });
+    expect(outcome.mode).toBe('map-reduce');
+    expect(seen.map((x) => [x.calls, x.idx, x.count])).toEqual([
+      [0, 0, 2],
+      [1, 1, 2],
+    ]);
+    expect(seen.map((x) => x.label)).toEqual(diff.files.map((f) => f.path));
+  });
+
+  it('a throwing hook does not fail the review', async () => {
+    const llm = new MockLLMProvider('openai', { structured: clean });
+    const diff = await new MockGitClient().diff();
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff, llm,
+      onPromptAssembled: () => {
+        throw new Error('boom');
+      },
+    });
+    expect(outcome.review.verdict).toBe('approve');
+  });
+});

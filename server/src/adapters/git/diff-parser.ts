@@ -43,7 +43,7 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
       continue;
     }
     if (line.startsWith('--- ')) continue;
-    const hh = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    const hh = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/);
     if (hh) {
       flushHunk();
       const newStart = Number(hh[3]);
@@ -55,6 +55,7 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
         newStart,
         newLines,
         newLineNumbers: [],
+        ...(hh[5]?.trim() ? { heading: hh[5].trim() } : {}),
       };
       newLineCursor = newStart;
       continue;

@@ -7,6 +7,8 @@ import type {
 } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { ValidationError } from '../../platform/errors.js';
+import type { PinoLike } from '../../platform/run-logger.js';
+import { emitPromptAssembled, promptLogMode } from '../../platform/prompt-log.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { RepoIntelRepository } from '../repo-intel/repository.js';
 import {
@@ -85,7 +87,11 @@ export class ConventionsService {
 
   // ------------------------------------------------------------------- scan
 
-  async extract(workspaceId: string, repoId: string): Promise<ConventionExtractResult> {
+  async extract(
+    workspaceId: string,
+    repoId: string,
+    logger?: Pick<PinoLike, 'info' | 'warn' | 'error'>,
+  ): Promise<ConventionExtractResult> {
     const repo = await this.intelRepo.getRepoBasics(repoId);
     if (!repo) throw new ValidationError('Repo not found');
 
@@ -102,6 +108,17 @@ export class ConventionsService {
     const choice = await resolveFeatureModel(this.container, workspaceId, 'conventions');
     const llm = await this.container.llm(choice.provider);
     const repoLabel = `${repo.owner}/${repo.name}`;
+    const userMessage = buildExtractionUserMessage(repoLabel, sample);
+    emitPromptAssembled(logger, promptLogMode(this.container), this.container.tokenizer, {
+      feature: 'conventions',
+      provider: choice.provider,
+      model: choice.model,
+      repoId,
+      sections: [
+        { name: 'system', text: EXTRACTION_SYSTEM_PROMPT },
+        { name: 'repo_sample', text: userMessage, items: used.length, itemNames: used.map((f) => f.path) },
+      ],
+    });
     const result = await llm.completeStructured({
       model: choice.model,
       schema: ExtractionSchema,
@@ -109,7 +126,7 @@ export class ConventionsService {
       temperature: EXTRACTION_TEMPERATURE,
       messages: [
         { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
-        { role: 'user', content: buildExtractionUserMessage(repoLabel, sample) },
+        { role: 'user', content: userMessage },
       ],
     });
     const proposed = result.data.candidates ?? [];

@@ -3,6 +3,8 @@ import {
   Review,
   Finding,
   Intent,
+  IntentSource,
+  PrIntentResponse,
   BlastRadius,
   Risks,
   PrHistory,
@@ -67,8 +69,19 @@ describe('AI contracts parse fixtures', () => {
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({
+        summary: 'x',
+        in_scope: ['a'],
+        out_of_scope: ['b'],
+        risk_areas: [{ label: 'auth', kind: 'auth' }],
+        missing_context: [],
+        confidence: 'high',
+      }),
     ).not.toThrow();
+    expect(() =>
+      IntentSource.parse({ kind: 'repo_doc', ref: 'specs/x.md', status: 'used', reason: null, tokens: 12 }),
+    ).not.toThrow();
+    expect(PrIntentResponse.parse({ intent: null, stale: false }).stale).toBe(false);
     expect(() =>
       BlastRadius.parse({
         changed_symbols: [{ name: 'rateLimit', file: 'a.ts', kind: 'function' }],

@@ -116,6 +116,14 @@ function isPrivateV6(ip: string): boolean {
   if (x === '::1' || x === '::') return true; // loopback, unspecified
   const mapped = x.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped
   if (mapped) return isPrivateV4(mapped[1]!);
+  // WHATWG URL serialises `[::ffff:127.0.0.1]` as hex `::ffff:7f00:1` — decode
+  // the embedded IPv4 (mapped `::ffff:` and deprecated compatible `::` forms).
+  const hex = x.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const hi = parseInt(hex[1]!, 16);
+    const lo = parseInt(hex[2]!, 16);
+    return isPrivateV4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
   if (/^f[cd]/.test(x)) return true; // fc00::/7 unique-local
   if (/^fe[89ab]/.test(x)) return true; // fe80::/10 link-local
   return false;

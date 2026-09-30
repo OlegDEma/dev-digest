@@ -70,3 +70,42 @@ export function sliceDiff(diff: UnifiedDiff, path: string): string {
   if (!f) return diff.raw;
   return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}`;
 }
+
+const OUT_OF_SCOPE_RE = /^out of scope:/i;
+const SEVERITY_RANK: Record<Finding['severity'], number> = { CRITICAL: 2, WARNING: 1, SUGGESTION: 0 };
+
+/**
+ * Deterministic "one signal, not twenty" cap for out-of-scope findings.
+ * Drops every SUGGESTION-severity `Out of scope:` finding, then keeps only the
+ * highest-severity (then highest-confidence) remaining one. Other findings pass.
+ */
+export function capOutOfScopeFindings(findings: Finding[]): {
+  kept: Finding[];
+  dropped: Finding[];
+} {
+  const oos = findings.filter((f) => OUT_OF_SCOPE_RE.test(f.title.trim()));
+  if (oos.length === 0) return { kept: findings, dropped: [] };
+  const best = oos
+    .filter((f) => f.severity !== 'SUGGESTION')
+    .sort(
+      (a, b) =>
+        SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || b.confidence - a.confidence,
+    )[0];
+  const dropped = oos.filter((f) => f !== best);
+  // Collapse, don't hide: the signal finding lists the other serious
+  // out-of-scope defects (title + location) so none of them vanishes.
+  const folded = dropped.filter((f) => f.severity !== 'SUGGESTION');
+  const signal: Finding | undefined =
+    best && folded.length > 0
+      ? {
+          ...best,
+          rationale: `${best.rationale}\n\n**Also out of scope (${folded.length}):**\n${folded
+            .map((f) => `- [${f.severity}] ${f.title.replace(OUT_OF_SCOPE_RE, '').trim()} — \`${f.file}:${f.start_line}\``)
+            .join('\n')}`,
+        }
+      : best;
+  const kept = findings.flatMap((f) =>
+    !OUT_OF_SCOPE_RE.test(f.title.trim()) ? [f] : f === best && signal ? [signal] : [],
+  );
+  return { kept, dropped };
+}
