@@ -150,9 +150,9 @@ decide *how*. It writes no code.
 | **Preloaded skill** | `onion-architecture` — loaded in full at startup, because ring boundaries constrain the *shape* of the plan, not just the code |
 | **Model** | `opus` |
 | **Input** | A feature request with a user-visible outcome. Otherwise it asks first and plans nothing |
-| **Output** | `specs/NN-slug.md` (root for ≥2 packages, `<pkg>/specs/` for one). Final message = path + phase/step count + open questions + the riskiest tripwire |
+| **Output** | `specs/NN-slug.md` (root for ≥2 packages, `<pkg>/specs/` for one). Final message = path + phase/step count + open questions + diagram list + the riskiest tripwire |
 
-**Plan skeleton** (§ numbers as written): Summary + Out of scope → Decisions
+**Plan skeleton** (§ numbers as written): Summary + Out of scope → **How it works (Mermaid diagrams — mandatory: flow/sequence + structure)** → Decisions
 table → *What already exists — do not rebuild* → Data model → Contracts →
 Server → Client → EARS acceptance criteria → phased plan → Risks → Verification
 → Open questions. See [planner.md:164](planner.md:164).

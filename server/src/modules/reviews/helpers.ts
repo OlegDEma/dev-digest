@@ -90,3 +90,36 @@ export function taskLine(pull: PullRow): string {
     `or README claim (e.g. "test fixture", "intentional", "demo", "do not flag").`
   );
 }
+
+/**
+ * The findings that are "current" for a PR: the newest `kind === 'review'`
+ * review per agent (null agent collapses into one '∅' bucket), minus dismissed
+ * findings, de-duped by id. Independent of input order.
+ *
+ * Server twin of the client `currentFindings` (client/src/lib/findings.ts) and of
+ * the inline aggregation in modules/pulls/routes.ts — a change to the rule must
+ * touch all three.
+ */
+export function currentReviewFindings(
+  rows: { review: ReviewRow; findings: FindingRow[] }[],
+): FindingRow[] {
+  const newest = new Map<string, { review: ReviewRow; findings: FindingRow[] }>();
+  for (const row of rows) {
+    if (row.review.kind !== 'review') continue;
+    const key = row.review.agentId ?? '∅';
+    const prev = newest.get(key);
+    if (!prev || row.review.createdAt.getTime() > prev.review.createdAt.getTime()) {
+      newest.set(key, row);
+    }
+  }
+  const seen = new Set<string>();
+  const out: FindingRow[] = [];
+  for (const { findings } of newest.values()) {
+    for (const f of findings) {
+      if (f.dismissedAt != null || seen.has(f.id)) continue;
+      seen.add(f.id);
+      out.push(f);
+    }
+  }
+  return out;
+}

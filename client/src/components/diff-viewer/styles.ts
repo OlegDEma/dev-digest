@@ -90,3 +90,31 @@ export function lineSignFor(kind: Line["kind"]): CSSProperties {
     flexShrink: 0,
   };
 }
+
+/** Left bar on a line that carries a finding (colour from the SEV token). */
+export function findingBar(color: string): CSSProperties {
+  return { boxShadow: `inset 3px 0 0 ${color}` };
+}
+
+export const lineSevLabel = {
+  display: "inline-flex",
+  alignItems: "center",
+  alignSelf: "center",
+  flexShrink: 0,
+  paddingRight: 12,
+} satisfies CSSProperties;
+
+/** Red dot in the file header: this file has current findings. */
+export const findingDot = {
+  width: 8,
+  height: 8,
+  borderRadius: "50%",
+  background: "var(--crit)",
+  display: "inline-block",
+  flexShrink: 0,
+} satisfies CSSProperties;
+
+/** Small lowercase severity word, coloured from the SEV token. */
+export function lineSevLabelText(color: string): CSSProperties {
+  return { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color };
+}

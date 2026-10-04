@@ -15,9 +15,12 @@ import {
   type CommentThread,
   type DiffCommentApi,
 } from "../comments";
-import { s, chevronFor } from "../styles";
+import { s, chevronFor, findingDot } from "../styles";
+import type { CollapseSignal } from "../collapse";
+import { partitionAnnotations, type DiffAnnotation, type DiffAnnotationApi } from "../annotations";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
+import { OffDiffFindings } from "../OffDiffFindings";
 
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
 function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): CommentThread[] {
@@ -30,12 +33,51 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+/** Annotations anchored to a given parsed line (new side only). */
+function annotationsForLine(ln: Line, matched: Map<string, DiffAnnotation[]>): DiffAnnotation[] {
+  if (matched.size === 0 || (ln.kind !== "add" && ln.kind !== "ctx") || ln.newNo == null) return [];
+  return matched.get(`RIGHT:${ln.newNo}`) ?? [];
+}
+
+export function FileCard({
+  file,
+  commenting,
+  annotations,
+  collapseSignal,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  annotations?: DiffAnnotationApi;
+  collapseSignal?: CollapseSignal;
+}) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
     (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
+  // A host-driven "open/close all": each new version forces this file to the
+  // signal's state; version 0 is the initial no-op, and per-file toggles still work.
+  const signalVersion = collapseSignal?.version ?? 0;
+  const signalOpen = collapseSignal?.open ?? true;
+  React.useEffect(() => {
+    if (signalVersion > 0) setOpen(signalOpen);
+  }, [signalVersion, signalOpen]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+
+  const renderedKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const ln of lines) for (const k of keysForLine(ln)) keys.add(k);
+    return keys;
+  }, [lines]);
+
+  const annotationItems = annotations?.items;
+  const fileAnnotations = React.useMemo(
+    () => (annotationItems ?? []).filter((a) => a.path === file.path),
+    [annotationItems, file.path],
+  );
+  const { matched: matchedAnnotations, unmatched: offDiff } = React.useMemo(
+    () => partitionAnnotations(fileAnnotations, renderedKeys),
+    [fileAnnotations, renderedKeys],
+  );
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -43,10 +85,8 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
   const { matched, outdated } = React.useMemo(() => {
     if (!comments) return { matched: new Map<string, CommentThread[]>(), outdated: [] };
     const fileThreads = buildThreads(comments.filter((c) => c.path === file.path));
-    const renderedKeys = new Set<string>();
-    for (const ln of lines) for (const k of keysForLine(ln)) renderedKeys.add(k);
     return partitionThreads(fileThreads, renderedKeys);
-  }, [comments, file.path, lines]);
+  }, [comments, file.path, renderedKeys]);
 
   const commentCount = commenting
     ? commenting.comments.filter((c) => c.path === file.path).length
@@ -64,6 +104,13 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
         </span>
+        {fileAnnotations.length > 0 && (
+          <span
+            role="img"
+            aria-label={t("diffViewer.hasFindings", { count: fileAnnotations.length })}
+            style={findingDot}
+          />
+        )}
         {commentCount > 0 && (
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
@@ -85,10 +132,15 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                annotations={annotationsForLine(ln, matchedAnnotations)}
+                annotationApi={annotations}
               />
             ))
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
+          {annotations && annotations.show && (
+            <OffDiffFindings items={offDiff} render={annotations.render} />
+          )}
         </div>
       )}
     </div>
