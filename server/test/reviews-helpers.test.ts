@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { taskLine } from '../src/modules/reviews/helpers.js';
+import { taskLine, currentReviewFindings } from '../src/modules/reviews/helpers.js';
 
 /**
  * Unit coverage for the review task-line. The key invariant: our trusted
@@ -20,5 +20,37 @@ describe('taskLine', () => {
     const line = taskLine(pull);
     expect(line).toMatch(/never .*withhold .*(or downgrade )?.*security/i);
     expect(line).toMatch(/review the entire diff/i);
+  });
+});
+
+describe('currentReviewFindings', () => {
+  const rev = (id: string, agentId: string | null, at: string, kind = 'review') =>
+    ({ id, agentId, kind, createdAt: new Date(at) }) as never;
+  const fnd = (id: string, dismissedAt: Date | null = null) => ({ id, dismissedAt }) as never;
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id).sort();
+
+  it('ignores an older review of the same agent even when passed first', () => {
+    const out = currentReviewFindings([
+      { review: rev('r1', 'a', '2026-01-01'), findings: [fnd('old')] },
+      { review: rev('r2', 'a', '2026-02-01'), findings: [fnd('new')] },
+    ]);
+    expect(ids(out)).toEqual(['new']);
+  });
+
+  it('collapses null-agent reviews into one bucket (newest wins)', () => {
+    const out = currentReviewFindings([
+      { review: rev('r1', null, '2026-02-01'), findings: [fnd('new')] },
+      { review: rev('r2', null, '2026-01-01'), findings: [fnd('old')] },
+    ]);
+    expect(ids(out)).toEqual(['new']);
+  });
+
+  it('ignores summary reviews and dismissed findings; agents are additive', () => {
+    const out = currentReviewFindings([
+      { review: rev('s', 'a', '2026-03-01', 'summary'), findings: [fnd('sum')] },
+      { review: rev('r1', 'a', '2026-01-01'), findings: [fnd('a1'), fnd('gone', new Date())] },
+      { review: rev('r2', 'b', '2026-01-01'), findings: [fnd('b1'), fnd('a1')] },
+    ]);
+    expect(ids(out)).toEqual(['a1', 'b1']);
   });
 });

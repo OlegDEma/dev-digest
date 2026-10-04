@@ -36,3 +36,27 @@ export function parsePatch(patch: string | null | undefined): Line[] {
   }
   return out;
 }
+
+/**
+ * Split items into those whose key is among the rendered line keys and the rest
+ * (null key, or a key not rendered). Input order is preserved in each bucket.
+ */
+export function partitionByLineKey<T>(
+  items: T[],
+  keyOf: (item: T) => string | null,
+  rendered: Set<string>,
+): { matched: Map<string, T[]>; unmatched: T[] } {
+  const matched = new Map<string, T[]>();
+  const unmatched: T[] = [];
+  for (const item of items) {
+    const key = keyOf(item);
+    if (key && rendered.has(key)) {
+      const list = matched.get(key) ?? [];
+      list.push(item);
+      matched.set(key, list);
+    } else {
+      unmatched.push(item);
+    }
+  }
+  return { matched, unmatched };
+}

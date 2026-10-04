@@ -1,0 +1,18 @@
+{
+  "name": "PR detail Files changed tab shows the reviewer-ordered (Smart Diff) view",
+  "description": "From PR #482, open Files changed and confirm the role-grouped view renders (title, Core logic group, seeded findings listed outside the diff because the seeded files carry no patch), then switch to Original order and confirm the flat list still shows src/config.ts. Read-only seeded data, no model call. Assumes a freshly-seeded DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Files changed"], "label": "switch to the Files changed tab" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "diff tab is active in the URL" },
+    { "cmd": ["wait", "--text", "Reviewer-ordered diff"], "label": "the smart-diff header renders" },
+    { "cmd": ["wait", "--text", "Core logic"], "label": "the Core logic group renders" },
+    { "cmd": ["wait", "--text", "Findings outside this diff"], "label": "seeded findings (no patch) land in the off-diff block" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Original order"], "label": "switch to Original order" },
+    { "cmd": ["wait", "--text", "src/config.ts"], "label": "the flat list still shows the seeded file" }
+  ]
+}

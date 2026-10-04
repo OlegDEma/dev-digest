@@ -31,6 +31,14 @@
     "defaultBody": "This screen is owned by {owner}. The app shell, routing, theming and data layer are wired — {owner} fills in the screen here."
   },
   "diffViewer": {
+    "hasFindings": "{count, plural, one {# finding} other {# findings}} in this file",
+    "severity": {
+      "critical": "blocker",
+      "warning": "warning",
+      "suggestion": "suggestion",
+      "info": "info"
+    },
+    "findingsOutsideDiff": "Findings outside this diff",
     "noDiffText": "No diff text available (binary or unfetched patch).",
     "noChangedFiles": "No changed files.",
     "commentPlaceholder": "Leave a comment… (⌘/Ctrl+Enter to post)",

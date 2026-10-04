@@ -12,6 +12,7 @@ import type {
   ReviewRecord,
   ReviewRunResponse,
   RunEvent,
+  SmartDiffResponse,
   RunSummary,
 } from "@devdigest/shared";
 
@@ -56,6 +57,30 @@ export function usePrReviews(prId: string | null | undefined) {
   });
 }
 
+// ---- Smart Diff: role-grouped file list (server-side classifier, no model) ----
+export function useSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["smart-diff", prId],
+    queryFn: () => api.get<SmartDiffResponse>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
+/** When the last live run of a PR settles, refresh its reviews + smart-diff so
+   the Files changed tab updates whichever tab is open. Call from the page that
+   owns the live-run count. */
+export function useInvalidateOnRunsSettled(prId: string | null | undefined, liveRunCount: number) {
+  const qc = useQueryClient();
+  const prev = React.useRef(liveRunCount);
+  React.useEffect(() => {
+    if (prev.current > 0 && liveRunCount === 0 && prId) {
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
+    }
+    prev.current = liveRunCount;
+  }, [liveRunCount, prId, qc]);
+}
+
 /** Delete one run from the PR's run history (+ its trace). */
 export function useDeleteRun(prId: string | null | undefined) {
   const qc = useQueryClient();
@@ -66,6 +91,7 @@ export function useDeleteRun(prId: string | null | undefined) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
     },
   });
 }
@@ -82,7 +108,10 @@ export function useDeleteReview(prId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reviewId: string) => api.del<{ ok: boolean }>(`/reviews/${reviewId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews", prId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
+    },
   });
 }
 
@@ -131,6 +160,7 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
     },
   });
 }
@@ -155,7 +185,10 @@ export function useFindingAction() {
         reply ? { reply } : undefined,
       ),
     onSuccess: (_d, { prId }) => {
-      if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      if (prId) {
+        qc.invalidateQueries({ queryKey: ["reviews", prId] });
+        qc.invalidateQueries({ queryKey: ["smart-diff", prId] });
+      }
     },
   });
 }

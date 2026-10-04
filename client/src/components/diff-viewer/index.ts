@@ -2,3 +2,6 @@
    Public surface: the DiffViewer component + the DiffCommentApi contract. */
 export { DiffViewer } from "./DiffViewer";
 export type { DiffCommentApi } from "./comments";
+export type { DiffAnnotation, DiffAnnotationApi } from "./annotations";
+export type { CollapseSignal } from "./collapse";
+export { AUTO_EXPAND_MAX_LINES } from "./constants";
