@@ -201,6 +201,18 @@ prefix in that directory (check with `ls`). Slug is kebab-case.
 <What this builds and why, 1–2 paragraphs. Then:>
 **Out of scope:** <explicit list — this is what stops scope creep later>
 
+### How it works (diagrams) — REQUIRED
+<Mermaid diagrams (use the `mermaid-diagram` skill) so the owner can see how the
+feature works before reading the details. Always include at least:
+1. **Flow / sequence** — the end-to-end path of the main user action: UI → hook →
+   route → service → repository/adapter → back to the rendered result.
+2. **Structure** — the components/modules this change adds or touches and how they
+   connect (new nodes visually marked, e.g. `:::new` class), split by package/ring.
+Add more when they carry information: a state diagram for toggles/lifecycles, a
+decision flowchart for rule chains (e.g. classifiers, first-match-wins), an ER
+diagram when §4 changes the schema. Every node name must be a real file, symbol,
+route or table from this plan — no invented boxes. Keep each diagram ≤ ~20 nodes.>
+
 ## 2. Decisions
 | # | Decision | Consequence |
 |---|----------|-------------|
@@ -266,6 +278,9 @@ then DB, then server, then client — per the contract-first rule.>
 
 - **Every step is one concrete edit to a named file.** "Wire up the service" is
   not a step. If you cannot name the file, you have not finished researching.
+- **Every plan has diagrams.** §1 "How it works" with at least a flow/sequence
+  diagram and a structure diagram in Mermaid is mandatory — the owner reviews the
+  plan from them first. A plan without them is not finished.
 - **Every AC is observable.** If nobody can tell whether it happened, it is a
   wish, not a criterion.
 - **Phases are checkpoints.** Each phase ends in a state where the typecheck in
@@ -285,7 +300,8 @@ End your final message with:
 1. the path of the plan file you wrote,
 2. the phase count and step count,
 3. the open questions from §12, verbatim, as the thing you need answered,
-4. any tripwire from §10 you judge to be the most likely to be got wrong.
+4. the list of diagrams in §1 "How it works" (type + one-line purpose each),
+5. any tripwire from §10 you judge to be the most likely to be got wrong.
 
 Then add a **summary of at most 40 lines** (spec 09, D11):
 - decisions, one line each;

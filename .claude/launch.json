@@ -3,15 +3,22 @@
   "configurations": [
     {
       "name": "api",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeExecutable": "./node_modules/.bin/tsx",
+      "runtimeArgs": [
+        "watch",
+        "src/server.ts"
+      ],
       "cwd": "server",
       "port": 3001
     },
     {
       "name": "web",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeExecutable": "./node_modules/.bin/next",
+      "runtimeArgs": [
+        "dev",
+        "-p",
+        "3000"
+      ],
       "cwd": "client",
       "port": 3000
     }
