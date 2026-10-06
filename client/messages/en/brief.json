@@ -15,5 +15,29 @@
     "blame": "blame",
     "noHistory": "No history available for this line.",
     "noCommits": "No commits found for this line."
+  },
+  "intent": {
+    "inScope": "IN SCOPE",
+    "outOfScope": "OUT OF SCOPE",
+    "riskAreas": "RISK AREAS",
+    "missingContext": "Missing context",
+    "sources": "Sources",
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "stale": "PR updated since intent was derived",
+    "recompute": "Recompute",
+    "derive": "Derive intent",
+    "empty": "No intent yet",
+    "recomputed": "Intent updated",
+    "failed": "Could not derive intent",
+    "saved": "saved {count} diff tokens",
+    "sourceStatus": {
+      "used": "used",
+      "unresolved": "unresolved",
+      "skipped": "skipped"
+    }
   }
 }

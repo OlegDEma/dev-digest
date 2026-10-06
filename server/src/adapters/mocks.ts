@@ -125,6 +125,8 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Repo files by path, returned by getFileContent (any ref). */
+  files?: Record<string, string>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -232,6 +234,12 @@ export class MockGitHubClient implements GitHubClient {
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {
     return { number: n, title: `Issue #${n}`, body: 'mock issue', state: 'open' };
+  }
+
+  async getFileContent(_repo: RepoRef, path: string, _ref: string): Promise<string> {
+    const text = this.opts.files?.[path];
+    if (text === undefined) throw new Error('Not Found');
+    return text;
   }
 
   async currentLogin(): Promise<string> {

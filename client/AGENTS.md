@@ -19,7 +19,7 @@ instead of re-deriving from code. Cross-package findings live in the root
 ```sh
 pnpm dev          # Next.js dev server, :3000
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest + jsdom, fetch mocked (no API or browser needed)
+pnpm test         # vitest + jsdom, lib/hooks/* mocked (no API or browser needed)
 pnpm build        # next build
 ```
 
@@ -34,10 +34,20 @@ pnpm build        # next build
 
 ## Gotchas
 
+- **Never run `next build` while `pnpm dev` is running** — both write `.next/`, and
+  every route then 500s (`Cannot find module './617.js'`). Stop the dev server,
+  `rm -rf client/.next`, rebuild. `pr-self-review`'s gate script runs `next build`,
+  so stop the dev server before it too (`client/INSIGHTS.md` → Recurring Errors & Fixes).
+- **The kit `Checkbox` has no accessible name in Chromium** (a role-overridden
+  `<button>` is not named from its wrapping `<label>`). For a toggle that needs a
+  name, use your own `<button role="checkbox" aria-label=…>`, as `BindCheckbox` does
+  in `src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx`
+  (`client/INSIGHTS.md` → Codebase Patterns, 2026-09-21).
 - `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`) sets the API base used
   by `src/lib/api.ts`.
-- Tests mock `fetch`, so they need neither the API nor a browser — the real
-  end-to-end journeys live in [`../e2e`](../e2e/README.md).
+- Tests mock the `lib/hooks/*` module, so they need neither the API nor a
+  browser — the real end-to-end journeys live in
+  [`../e2e`](../e2e/README.md).
 - `src/vendor/shared` is a hand-copy of the server's canonical copy and **drifts**
   (no sync script) — check the root [`../INSIGHTS.md`](../INSIGHTS.md) before relying on it.
 

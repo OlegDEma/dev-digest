@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { PrIntentRecord, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -8,6 +8,8 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { IntentService } from '../intent/service.js';
+import { emitPromptAssembled, promptLogMode } from '../../platform/prompt-log.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -45,6 +47,7 @@ export class ReviewRunExecutor {
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
+    private intents: IntentService = new IntentService(container),
   ) {}
 
   /**
@@ -105,6 +108,17 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Derive (or reuse) the PR intent once, shared by every agent. Non-fatal:
+    // forReview logs a failure and returns undefined.
+    const intent = await runLog.step(
+      'Deriving PR intent',
+      () => this.intents.forReview(workspaceId, pull, repo, diff, runLog, {
+          logger,
+          runIds: jobs.map((j) => j.runId),
+        }),
+      { kind: 'tool' },
+    );
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -112,7 +126,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intent, logger);
         logger?.info(
           {
             runId,
@@ -144,6 +158,8 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intent?: PrIntentRecord,
+    logger?: Logger,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -195,6 +211,12 @@ export class ReviewRunExecutor {
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
       // above, and persistence + observability below.
+      const sessionId = `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`;
+      const skillNames = skillBlocks.map((b) => {
+        const nl = b.indexOf('\n');
+        return b.slice(4, nl < 0 ? undefined : nl);
+      });
+      const callIds: string[] = [];
       const outcome = await reviewPullRequest({
         systemPrompt: agent.systemPrompt,
         model: agent.model,
@@ -214,14 +236,54 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Derived PR intent — untrusted block before the diff + scope rules + the
+        // one-signal cap on out-of-scope findings (reviewer-core).
+        ...(intent ? { intent } : {}),
         task,
-        sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
+        sessionId,
+        onPromptAssembled: (p) => {
+          const id = emitPromptAssembled(logger, promptLogMode(this.container), this.container.tokenizer, {
+            feature: 'review',
+            provider: agent.provider,
+            model: agent.model,
+            runId,
+            prId: pull.id,
+            repoId: pull.repoId,
+            agent: agent.name,
+            sessionId,
+            chunk: { index: p.chunkIndex, count: p.chunkCount, path: p.chunkLabel },
+            sections: p.sections.map((s) => ({
+              name: s.name,
+              text: s.text,
+              items: s.items,
+              itemNames: s.name === 'skills' ? skillNames : undefined,
+            })),
+          });
+          if (id) callIds.push(id);
+        },
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
         checkCancelled: () => {
           if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
         },
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
+
+      // Reviewer prompt composition (token estimates per slot; no content).
+      const slots: Record<string, number> = {};
+      for (const [slot, text] of Object.entries(outcome.assembly)) {
+        if (typeof text === 'string' && text) slots[slot] = this.container.tokenizer.count(text);
+      }
+      const slotText = Object.entries(slots).map(([k, n]) => `${k} ${n}`).join(', ');
+      const callIdText =
+        callIds.length === 0
+          ? ''
+          : callIds.length === 1
+            ? ` · call_id=${callIds[0]}`
+            : ` · call_ids=${callIds[0]}… (+${callIds.length - 1})`;
+      runLog.info(`Reviewer prompt composition — ${agent.provider}/${agent.model}: ${slotText}${callIdText}`, {
+        model: agent.model,
+        slots,
+      });
 
       const keptFindings = outcome.review.findings;
 

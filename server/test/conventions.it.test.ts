@@ -10,6 +10,8 @@ import { seed } from '../src/db/seed.js';
 import * as t from '../src/db/schema.js';
 import { MockLLMProvider } from '../src/adapters/mocks.js';
 import type { RepoIntel, CodeIndex } from '@devdigest/shared';
+import { vi } from 'vitest';
+import { ConventionsService } from '../src/modules/conventions/service.js';
 
 /**
  * End-to-end cover for the extractor's contract with the outside world: the
@@ -235,5 +237,31 @@ d('Conventions extractor (Testcontainers pg)', () => {
     expect(del.statusCode).toBe(204);
     const after = await a.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
     expect(after.json()).toHaveLength(0);
+  });
+
+  it('emits exactly one content-free prompt.assembled record per extract', async () => {
+    const a = await buildApp({
+      config: {
+        ...config(),
+        promptLog: { requested: 'summary', effective: 'summary', downgradeReason: null },
+      },
+      db: pg.handle.db,
+      overrides: {
+        repoIntel,
+        codeIndex,
+        llm: { openai: new MockLLMProvider('openai', { structuredBySchema: { ConventionExtraction: EXTRACTION } }) },
+      },
+    });
+    const spy = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    await new ConventionsService(a.container).extract(workspaceId, repoId, spy);
+    const recs = spy.info.mock.calls
+      .map((c) => c[0] as Record<string, unknown>)
+      .filter((r) => r?.event === 'prompt.assembled');
+    expect(recs).toHaveLength(1);
+    expect(recs[0]).toMatchObject({ feature: 'conventions', repo_id: repoId });
+    const json = JSON.stringify(recs[0]);
+    expect(json).not.toContain("display: 'flex'");
+    expect(json).not.toContain('CSSProperties');
+    await a.close();
   });
 });

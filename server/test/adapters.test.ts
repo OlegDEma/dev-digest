@@ -9,6 +9,7 @@ import {
 } from '../src/adapters/mocks.js';
 import { assemblePrompt } from '../src/platform/prompt.js';
 import { groundFindings } from '../src/platform/grounding.js';
+import { parseUnifiedDiff } from '../src/adapters/git/diff-parser.js';
 import { estimateCost } from '../src/adapters/llm/pricing.js';
 
 describe('mock adapters (no network)', () => {
@@ -103,5 +104,26 @@ describe('pricing / cost discipline', () => {
   it('estimates cost for known models and returns null for unknown', () => {
     expect(estimateCost('gpt-4o-mini', 1_000_000, 0)).toBeCloseTo(0.15, 5);
     expect(estimateCost('some-future-model', 1000, 1000)).toBeNull();
+  });
+});
+
+describe('diff-parser hunk heading', () => {
+  it('captures the section heading after the closing @@ and omits it when empty', () => {
+    const diff = parseUnifiedDiff(
+      [
+        'diff --git a/a.ts b/a.ts',
+        '--- a/a.ts',
+        '+++ b/a.ts',
+        '@@ -1,2 +1,3 @@ export function foo()',
+        ' x',
+        '+y',
+        '@@ -10,1 +11,1 @@',
+        '-a',
+        '+b',
+      ].join('\n'),
+    );
+    const [h1, h2] = diff.files[0]!.hunks;
+    expect(h1!.heading).toBe('export function foo()');
+    expect(h2!.heading).toBeUndefined();
   });
 });

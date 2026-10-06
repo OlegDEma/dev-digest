@@ -106,6 +106,13 @@
       "when": 1790161159842,
       "tag": "0014_smart_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790717093746,
+      "tag": "0015_neat_echo",
+      "breakpoints": true
     }
   ]
 }

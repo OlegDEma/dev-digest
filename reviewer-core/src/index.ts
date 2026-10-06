@@ -15,9 +15,27 @@
 export {
   assemblePrompt,
   wrapUntrusted,
+  renderIntentBlock,
   type PromptParts,
   type AssembledPrompt,
+  type ReviewPromptSection,
+  type ReviewPromptSectionName,
 } from './prompt.js';
+
+// Intent classifier (pure half — source collection lives in the server).
+export {
+  classifyIntent,
+  renderFileList,
+  buildIntentMessages,
+  adjustIntent,
+  MAX_INTENT_SOURCE_CHARS,
+  truncateForIntent,
+  MAX_INTENT_BODY_CHARS,
+  type IntentSourceInput,
+  type ClassifyIntentInput,
+  type ClassifyIntentResult,
+  type IntentPromptSection,
+} from './intent/classify.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
@@ -32,7 +50,7 @@ export {
 } from './llm/structured.js';
 
 // Map-reduce helpers (reduce partials, slice a file's diff).
-export { reduceReviews, sliceDiff } from './review/reduce.js';
+export { reduceReviews, sliceDiff, capOutOfScopeFindings } from './review/reduce.js';
 
 // The engine entry point: given (diff + resolved agent inputs + LLM) → grounded Review.
 export {
@@ -44,6 +62,7 @@ export {
   type ReviewEvent,
   type ReviewStrategy,
   type ReviewMode,
+  type PromptAssembledEvent,
 } from './review/run.js';
 
 // Output: grounded Review → GitHubReviewPayload (body + inline comments + event).

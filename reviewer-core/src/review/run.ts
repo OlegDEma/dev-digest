@@ -1,5 +1,6 @@
 import type {
   Finding,
+  Intent,
   LLMProvider,
   PromptAssembly,
   Review,
@@ -7,9 +8,9 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, renderIntentBlock, type ReviewPromptSection } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
-import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+import { capOutOfScopeFindings, reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -39,6 +40,15 @@ export interface ReviewEvent {
   kind: RunEventKind;
   msg: string;
   data?: unknown;
+}
+
+/** Payload of `ReviewInput.onPromptAssembled` — one per LLM call (chunk). */
+export interface PromptAssembledEvent {
+  chunkIndex: number;
+  chunkCount: number;
+  chunkLabel: string;
+  mode: ReviewMode;
+  sections: ReviewPromptSection[];
 }
 
 export interface ReviewInput {
@@ -71,6 +81,11 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * Derived PR intent (untrusted). When present it is rendered before the diff
+   * and out-of-scope findings are deterministically capped to one.
+   */
+  intent?: Intent;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -90,6 +105,11 @@ export interface ReviewInput {
    * type, e.g. the server's RunCancelledError); the engine stays agnostic.
    */
   checkCancelled?: () => void;
+  /**
+   * Observability hook, called once per chunk right before its LLM call. A throw
+   * is swallowed — it can never fail a review.
+   */
+  onPromptAssembled?: (p: PromptAssembledEvent) => void;
 }
 
 export interface ReviewOutcome {
@@ -135,6 +155,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent ? renderIntentBlock(input.intent) : undefined,
     task: input.task,
   };
 
@@ -159,7 +180,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   let costUsd: number | null = 0;
   const raws: string[] = [];
 
-  for (const chunk of chunks) {
+  for (const [chunkIndex, chunk] of chunks.entries()) {
     // Cancellation checkpoint — stop before the next (expensive) LLM call.
     input.checkCancelled?.();
     // 'map:' prefix only for the map-reduce path (one call per file). In
@@ -171,6 +192,17 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     );
     const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
     if (mode === 'single-pass') assembly = a.assembly;
+    try {
+      input.onPromptAssembled?.({
+        chunkIndex,
+        chunkCount: chunks.length,
+        chunkLabel: chunk.label,
+        mode,
+        sections: a.sections,
+      });
+    } catch {
+      /* observability hook must not fail a review */
+    }
     const res = await input.llm.completeStructured<Review>({
       model: input.model,
       schema: ReviewSchema,
@@ -201,11 +233,23 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
+  // Intent scope cap: at most one (non-SUGGESTION) `Out of scope:` finding.
+  let findings = ground.kept;
+  if (input.intent) {
+    const capped = capOutOfScopeFindings(findings);
+    findings = capped.kept;
+    if (capped.dropped.length > 0) {
+      const keptOos = capped.kept.filter((f) => /^out of scope:/i.test(f.title.trim())).length;
+      const where = capped.dropped.map((f) => `[${f.severity}] ${f.file}:${f.start_line}`).join(', ');
+      emit('info', `Out-of-scope cap: kept ${keptOos}, dropped ${capped.dropped.length} (${where})`);
+    }
+  }
+
   // Score is derived from the findings that SURVIVED grounding (not the model's
   // self-reported number, and not the pre-grounding set) so the score, the
   // findings list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings, score: scoreFromFindings(findings) },
     grounding,
     dropped: ground.dropped,
     mode,

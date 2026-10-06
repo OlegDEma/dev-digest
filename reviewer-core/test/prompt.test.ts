@@ -64,3 +64,66 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — PR intent slot', () => {
+  const intentText = 'Summary: add rate limiting';
+
+  it('renders the untrusted intent block before the diff and records assembly.intent', () => {
+    const { messages, assembly } = assemblePrompt({ system: 'S', diff: 'DIFF', intent: intentText });
+    const user = messages[1]!.content;
+    const i = user.indexOf('## PR intent (derived — untrusted)');
+    expect(i).toBeGreaterThan(-1);
+    expect(i).toBeLessThan(user.indexOf('## Diff to review'));
+    expect(user).toContain('<untrusted source="pr-intent">');
+    expect(assembly.intent).toBe(intentText);
+  });
+
+  it('omits the section when absent', () => {
+    const { messages, assembly } = assemblePrompt({ system: 'S', diff: 'DIFF' });
+    expect(messages[1]!.content).not.toContain('PR intent');
+    expect(assembly.intent).toBeNull();
+  });
+
+  it('guard still forbids descoping a real defect to zero findings', () => {
+    expect(systemOf({ system: 'S', diff: 'D' })).toMatch(/can never turn a real defect into zero findings/);
+  });
+});
+
+describe('assemblePrompt — sections', () => {
+  const full = {
+    system: 'SYS',
+    task: 'Review PR #1',
+    prDescription: 'body',
+    skills: ['### a\nA', '### b\nB'],
+    memory: ['m1', 'm2', 'm3'],
+    repoMap: 'map',
+    specs: ['s1'],
+    callers: 'callers',
+    intent: 'Summary: x',
+    diff: 'DIFF',
+  };
+  const minimal = { system: 'SYS', diff: 'DIFF' };
+
+  it('lists every section in render order with item counts', () => {
+    const { sections } = assemblePrompt(full);
+    expect(sections.map((s) => s.name)).toEqual([
+      'system', 'task', 'pr_description', 'skills', 'memory', 'repo_map', 'specs', 'callers', 'intent', 'diff',
+    ]);
+    const items = Object.fromEntries(sections.map((s) => [s.name, s.items]));
+    expect(items).toMatchObject({ skills: 2, memory: 3, specs: 1, diff: 1, system: 1 });
+  });
+
+  it('minimal input has only system + diff', () => {
+    expect(assemblePrompt(minimal).sections.map((s) => s.name)).toEqual(['system', 'diff']);
+  });
+
+  it.each([['full', full], ['minimal', minimal]])(
+    'sections describe exactly what is sent (%s)',
+    (_n, parts) => {
+      const { messages, sections, assembly } = assemblePrompt(parts);
+      expect(messages[0]!.content).toBe(sections[0]!.text);
+      expect(messages[1]!.content).toBe(sections.slice(1).map((s) => s.text).join('\n\n'));
+      expect(assembly.user).toBe(messages[1]!.content);
+    },
+  );
+});

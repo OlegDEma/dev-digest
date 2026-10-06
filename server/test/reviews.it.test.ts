@@ -8,6 +8,8 @@ import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mo
 import * as t from '../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Review } from '@devdigest/shared';
+import { vi } from 'vitest';
+import { ReviewService } from '../src/modules/reviews/service.js';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -299,5 +301,105 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     // seed has 2 enabled agents; we may have created more above in this PR's ws.
     expect(body.runs.length).toBeGreaterThanOrEqual(2);
     await app.close();
+  });
+
+  it('emits one prompt.assembled record per LLM call, keyed by run_id', async () => {
+    const llm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const app = await buildApp({
+      config: {
+        ...config(),
+        promptLog: { requested: 'summary', effective: 'summary', downgradeReason: null },
+      },
+      db: pg.handle.db,
+      overrides: { embedder: new MockEmbedder(), git: new MockGitClient({ diff: DIFF }), llm: { openai: llm } },
+    });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'PL', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec' },
+      })
+    ).json();
+    const [agent] = await pg.handle.db.select().from(t.agents).where(eq(t.agents.id, created.id));
+    const spy = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+
+    const { runs } = await new ReviewService(app.container).runReview(workspaceId, pr.id, [agent!], spy);
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const recs = spy.info.mock.calls
+      .map((c) => c[0] as Record<string, unknown>)
+      .filter((r) => r?.event === 'prompt.assembled' && r.feature === 'review');
+    const llmCalls = llm.calls.filter(
+      (c) => c.method === 'completeStructured' && (c.req as { schemaName?: string }).schemaName === 'Review',
+    ).length;
+    expect(llmCalls).toBeGreaterThan(0);
+    expect(recs).toHaveLength(llmCalls);
+    for (const r of recs) {
+      expect(r).toMatchObject({ feature: 'review', run_id: runs[0]!.run_id, pr_id: pr.id, agent: 'PL' });
+      expect(r).not.toHaveProperty('session_id');
+      expect(r.provider).toBe('openai');
+      expect(r.model).toBe('gpt-4.1');
+      const secs = r.sections as { chars: number; tokens: number }[];
+      expect(secs.length).toBeGreaterThan(0);
+      for (const sec of secs) {
+        expect(sec.chars).toBeGreaterThan(0);
+        expect(sec.tokens).toBeGreaterThan(0);
+      }
+    }
+    expect(new Set(recs.map((r) => r.call_id)).size).toBe(recs.length);
+    await app.close();
+  });
+
+  // PV-1 (AC-8): the reviewer Live Log composition line carries the call id(s).
+  const TWO_FILE_DIFF = `${DIFF}
+diff --git a/src/other.ts b/src/other.ts
+--- a/src/other.ts
++++ b/src/other.ts
+@@ -1,2 +1,3 @@
+ a,
++b,
+ c,`;
+
+  async function compositionMsg(
+    mode: 'summary' | 'off',
+    diff: string,
+    strategy: 'single-pass' | 'map-reduce',
+  ): Promise<string> {
+    const app = await buildApp({
+      config: { ...config(), promptLog: { requested: mode, effective: mode, downgradeReason: null } },
+      db: pg.handle.db,
+      overrides: {
+        embedder: new MockEmbedder(),
+        git: new MockGitClient({ diff }),
+        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW_FIXTURE }) },
+      },
+    });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: `LL-${mode}-${strategy}`, provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec', strategy },
+      })
+    ).json();
+    const { runs } = (
+      await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } })
+    ).json();
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    const trace = (await waitForRunTrace(app, runs[0].run_id)) as { log: { msg: string }[] };
+    await app.close();
+    const line = trace.log.find((l) => l.msg.startsWith('Reviewer prompt composition'));
+    expect(line).toBeDefined();
+    return line!.msg;
+  }
+
+  it('Live Log composition line: call_id for one chunk, call_ids for many, nothing when off', async () => {
+    expect(await compositionMsg('summary', DIFF, 'single-pass')).toMatch(/ · call_id=[0-9a-f-]{36}$/);
+    expect(await compositionMsg('summary', TWO_FILE_DIFF, 'map-reduce')).toMatch(
+      / · call_ids=[0-9a-f-]{36}… \(\+1\)$/,
+    );
+    const off = await compositionMsg('off', DIFF, 'single-pass');
+    expect(off).not.toContain('call_id');
   });
 });

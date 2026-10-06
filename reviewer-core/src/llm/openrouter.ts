@@ -69,7 +69,12 @@ export class OpenRouterProvider implements LLMProvider {
       const res = await this.client.chat.completions.create({
         model: req.model,
         messages,
-        temperature: req.temperature ?? 0,
+        // With `require_parameters`, every sent param must be supported by the
+        // routed provider — reasoning models (e.g. openai/gpt-6-luna) reject
+        // `temperature`, so only send it when the caller asked for it.
+        ...(this.id === 'openrouter' && req.requireParameters
+          ? req.temperature !== undefined ? { temperature: req.temperature } : {}
+          : { temperature: req.temperature ?? 0 }),
         ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
         response_format: {
           type: 'json_schema',
@@ -78,6 +83,11 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter session grouping — extra body field (spread is exempt from
         // excess-property checks). Only sent when talking to OpenRouter.
         ...(this.id === 'openrouter' && req.sessionId ? { session_id: req.sessionId } : {}),
+        // Only route to providers that honour strict json_schema — a model without
+        // it fails loudly instead of answering in prose.
+        ...(this.id === 'openrouter' && req.requireParameters
+          ? { provider: { require_parameters: true } }
+          : {}),
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),

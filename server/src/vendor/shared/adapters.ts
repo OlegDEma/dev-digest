@@ -67,6 +67,8 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /** OpenRouter: only route to providers that support every request parameter (e.g. strict json_schema). */
+  requireParameters?: boolean;
 }
 
 export interface StructuredResult<T> {
@@ -162,6 +164,8 @@ export interface GitHubClient {
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
+  /** Raw UTF-8 text of a file at `ref` (contents API — reads a ref, not a working tree). Throws if absent or not a file. */
+  getFileContent(repo: RepoRef, path: string, ref: string): Promise<string>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
 }
@@ -180,6 +184,8 @@ export interface DiffHunk {
   newLines: number;
   /** Lines present in the *new* file covered by this hunk (for grounding). */
   newLineNumbers: number[];
+  /** Section heading after the closing `@@` (e.g. enclosing function); absent when empty. */
+  heading?: string;
 }
 
 export interface UnifiedDiff {

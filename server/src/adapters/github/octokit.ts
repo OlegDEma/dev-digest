@@ -363,6 +363,24 @@ export class OctokitGitHubClient implements GitHubClient {
     };
   }
 
+  async getFileContent(repo: RepoRef, path: string, ref: string): Promise<string> {
+    const res = await withRetry(() =>
+      withTimeout(
+        this.octokit.rest.repos.getContent({
+          owner: repo.owner,
+          repo: repo.name,
+          path,
+          ref,
+          mediaType: { format: 'raw' },
+        }),
+        TIMEOUT,
+      ),
+    );
+    // With the raw media type a file comes back as a string; a directory as an array.
+    if (typeof res.data !== 'string') throw new Error(`${path} is not a file`);
+    return res.data;
+  }
+
   async currentLogin(): Promise<string> {
     const res = await withRetry(() =>
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),

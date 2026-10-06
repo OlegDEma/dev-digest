@@ -4,6 +4,15 @@ import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
 
+/** Persisted shape of a classifier source (mirrors the IntentSource contract). */
+export interface IntentSourceJson {
+  kind: string;
+  ref: string;
+  status: string;
+  reason: string | null;
+  tokens: number;
+}
+
 // ============================================================ Review & findings
 
 export const reviews = pgTable('reviews', {
@@ -52,6 +61,18 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  riskAreas: jsonb('risk_areas').$type<{ label: string; kind: string }[]>().notNull().default(sql`'[]'::jsonb`),
+  missingContext: jsonb('missing_context').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  // Zod enum (IntentConfidence) is the only guard — plain text here.
+  confidence: text('confidence').notNull().default('low'),
+  sources: jsonb('sources').$type<IntentSourceJson[]>().notNull().default(sql`'[]'::jsonb`),
+  model: text('model'),
+  headSha: text('head_sha'),
+  tokensIn: integer('tokens_in').notNull().default(0),
+  tokensOut: integer('tokens_out').notNull().default(0),
+  costUsd: doublePrecision('cost_usd'),
+  diffTokensSaved: integer('diff_tokens_saved').notNull().default(0),
+  computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const prBrief = pgTable('pr_brief', {

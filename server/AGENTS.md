@@ -37,6 +37,10 @@ pnpm db:seed                                # idempotent demo data
   encapsulated module plugins inherit them and the shared error handler.
 - External I/O goes through an adapter behind the DI container
   (`src/platform/container.ts`) so tests swap in `src/adapters/mocks.ts`.
+- Model- or user-supplied text handed to a child process is argv-hardened: pass
+  `-e <pattern> --` (or the tool's equivalent) so a leading `-` is never read as a
+  flag — `--pre=CMD` on `rg` runs an arbitrary command. Reference fix:
+  `src/adapters/codeindex/ripgrep.ts` (`grepWithRg`).
 - Schema changes: edit `src/db/schema.ts`, then `pnpm db:generate`. Never
   hand-write a migration file.
 - Secrets are read only through `LocalSecretsProvider`

@@ -6,12 +6,36 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+export const IntentRiskKind = z.enum(['auth', 'dependency', 'performance', 'data', 'security', 'api', 'other']);
+export type IntentRiskKind = z.infer<typeof IntentRiskKind>;
+export const IntentRiskArea = z.object({ label: z.string(), kind: IntentRiskKind });
+export type IntentRiskArea = z.infer<typeof IntentRiskArea>;
+export const IntentConfidence = z.enum(['high', 'medium', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+// Field order = generation order; judgement (confidence) last. Every field is
+// required: strict json_schema rejects optional properties.
 export const Intent = z.object({
-  intent: z.string(),
+  summary: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
+  risk_areas: z.array(IntentRiskArea),
+  missing_context: z.array(z.string()),
+  confidence: IntentConfidence,
 });
 export type Intent = z.infer<typeof Intent>;
+
+export const IntentSourceKind = z.enum(['pr_title', 'pr_body', 'issue', 'repo_doc', 'url', 'file_list']);
+export type IntentSourceKind = z.infer<typeof IntentSourceKind>;
+export const IntentSourceStatus = z.enum(['used', 'unresolved', 'skipped']);
+export type IntentSourceStatus = z.infer<typeof IntentSourceStatus>;
+export const IntentSource = z.object({
+  kind: IntentSourceKind,
+  ref: z.string(),
+  status: IntentSourceStatus,
+  reason: z.string().nullable(),
+  tokens: z.number().int(),
+});
+export type IntentSource = z.infer<typeof IntentSource>;
 
 // ---- Blast radius ----
 export const ChangedSymbol = z.object({

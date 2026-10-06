@@ -13,8 +13,8 @@ dashboard screens.)
   (`@devdigest/shared`).
 - **API base:** `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`), used by
   `src/lib/api.ts`. Every data hook lives in `src/lib/hooks/*`.
-- **Run:** `pnpm dev` (`:3000`). **Test:** `pnpm test` (vitest + jsdom, fetch
-  mocked — no API needed). **Typecheck:** `pnpm typecheck`.
+- **Run:** `pnpm dev` (`:3000`). **Test:** `pnpm test` (vitest + jsdom, the
+  `lib/hooks/*` module mocked — no API needed). **Typecheck:** `pnpm typecheck`.
 
 ## UI route map
 
@@ -45,8 +45,9 @@ Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 
 ## Testing
 
-Component/interaction tests (`*.test.tsx`) run under vitest + jsdom with `fetch`
-mocked, so they need neither the API nor a browser. The real browser journeys
+Component/interaction tests (`*.test.tsx`) run under vitest + jsdom with the
+`lib/hooks/*` module mocked, so they need neither the API nor a browser. The
+real browser journeys
 (client + API + seeded DB) are covered by the deterministic agent-browser suite
 in [`../e2e`](../e2e/README.md) and the `e2e-web.yml` workflow. See
 [`../TESTING.md`](../TESTING.md).

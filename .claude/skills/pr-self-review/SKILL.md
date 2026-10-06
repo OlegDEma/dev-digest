@@ -65,6 +65,11 @@ files into slices** per [`routing.md`](routing.md).
 bash .claude/skills/pr-self-review/scripts/run-gates.sh        # tsc · vitest · next build · arch:check if wired
 ```
 
+> **Stop `pnpm dev` first.** The gate runs `next build` (`scripts/run-gates.sh:51`),
+> and a build while the dev server is up corrupts the shared `client/.next/` (every
+> route then 500s with `Cannot find module './617.js'`). Stop the dev server,
+> `rm -rf client/.next`, then run the gate — or set `SKIP_BUILD=1`.
+
 Zero false positives. **Any failure is a deterministic CRITICAL** — record it and
 continue, so the report is complete. Details and the supply-chain-gate caveats are
 in [`references/deterministic-checks.md`](references/deterministic-checks.md).
