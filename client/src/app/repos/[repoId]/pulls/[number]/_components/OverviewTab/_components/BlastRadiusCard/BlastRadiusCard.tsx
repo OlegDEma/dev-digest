@@ -6,7 +6,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, ErrorState, Icon, SectionLabel, Skeleton } from "@devdigest/ui";
-import { usePrBlast } from "../../../../../../../../../lib/hooks/blast";
+import { blastQueryKey, usePrBlast } from "../../../../../../../../../lib/hooks/blast";
 import { useResyncRepoIntel } from "../../../../../../../../../lib/hooks/repo-intel";
 import { notify } from "../../../../../../../../../lib/toast";
 import { callerHref, linkSha, statItems } from "./helpers";
@@ -38,7 +38,8 @@ export function BlastRadiusCard({ prId, repoId, repoFullName, headSha }: BlastRa
     </div>
   );
 
-  if (q.isLoading) {
+  // isPending (not isLoading): a query paused offline has no data yet and must still show the skeleton.
+  if (q.isPending) {
     return (
       <section>
         <div style={s.card}>
@@ -48,7 +49,7 @@ export function BlastRadiusCard({ prId, repoId, repoFullName, headSha }: BlastRa
       </section>
     );
   }
-  if (q.isError || !q.data) {
+  if (q.isError) {
     return (
       <section>
         <div style={s.card}>
@@ -59,14 +60,14 @@ export function BlastRadiusCard({ prId, repoId, repoFullName, headSha }: BlastRa
     );
   }
 
-  const data = q.data;
+  const data = q.data!;
   const sha = linkSha(data, headSha);
   const hrefFor = (file: string, line: number) => callerHref(repoFullName, sha, file, line);
   const runResync = () =>
     resync.mutate(undefined, {
       onSuccess: () => {
         notify.success(t("resync.started"));
-        qc.invalidateQueries({ queryKey: ["pull-blast", prId] });
+        qc.invalidateQueries({ queryKey: blastQueryKey(prId) });
       },
       onError: () => notify.error(t("resync.failed")),
     });
@@ -111,9 +112,11 @@ export function BlastRadiusCard({ prId, repoId, repoFullName, headSha }: BlastRa
             <Badge icon="AlertTriangle" color="var(--warn)" bg="var(--warn-bg)">
               {t("degraded.label")} — {t(`degraded.reason.${data.reason}`)}
             </Badge>
+            {data.reason !== "flag_off" && data.reason !== "repo_too_large" && (
             <Button size="sm" onClick={runResync} disabled={resync.isPending} loading={resync.isPending}>
               {t("resync.action")}
             </Button>
+            )}
           </div>
         )}
 

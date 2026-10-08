@@ -4,10 +4,7 @@ import { NotFoundError } from '../../platform/errors.js';
 import type { PinoLike } from '../../platform/run-logger.js';
 import { ReviewRepository } from '../reviews/repository.js';
 import { MAX_CALLERS_PER_SYMBOL } from '../repo-intel/constants.js';
-import type { BlastResult } from '../repo-intel/types.js';
 import { blastStatus, toPrBlastResponse } from './helpers.js';
-
-const EMPTY_RESULT: BlastResult = { changedSymbols: [], callers: [], impactedEndpoints: [], degraded: false };
 
 /**
  * Blast radius of a PR: reads the prepared repo-intel index (never reparses,
@@ -41,17 +38,20 @@ export class BlastService {
           pull.headSha,
         );
         files = diff.files.map((f) => f.path);
-      } catch {
+      } catch (err) {
+        logger.warn({ pr_id: prId, err: (err as Error).message }, 'blast.diff_failed');
         files = [];
       }
     }
 
     const state = await this.container.repoIntel.getIndexState(pull.repoId);
-    const result =
-      files.length > 0
-        ? await this.container.repoIntel.getBlastRadius(pull.repoId, files, { fallback: false })
-        : EMPTY_RESULT;
-    const status = blastStatus(result, state);
+    // With no changed files the facade still answers (flag_off surfaces); otherwise an empty
+    // file list means we could not tell what changed, which is not an authoritative empty map.
+    const result = await this.container.repoIntel.getBlastRadius(pull.repoId, files, { fallback: false });
+    const status =
+      files.length === 0 && !result.degraded
+        ? { degraded: true, reason: 'no_data' as const }
+        : blastStatus(result, state);
     const resp = toPrBlastResponse(result, {
       ...status,
       indexSha: state.lastIndexedSha || null,

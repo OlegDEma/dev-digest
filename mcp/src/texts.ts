@@ -89,8 +89,35 @@ export const runNotFound = (runId: string): string =>
 export const BLAST_FLAG_OFF_NEXT =
   'Repo intelligence is off (REPO_INTEL_ENABLED=false), so there is no map. Enable it, restart the DevDigest API, index the repo, then call get_blast_radius again.';
 
-export const blastIndexNext = (reason: string): string =>
-  `The code index is incomplete (${reason}); the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.`;
+export const BLAST_NO_DATA_NEXT =
+  'The repo is not indexed yet, so the map is empty. Index it by resyncing the repo in the DevDigest studio, then call get_blast_radius again.';
+
+export const BLAST_INDEX_FAILED_NEXT =
+  'Indexing failed, so the map is empty or stale. Retry by resyncing the repo in the DevDigest studio, then call get_blast_radius again.';
+
+export const BLAST_TOO_LARGE_NEXT =
+  'The repo is too large to index, so no map is possible for it. Use run_agent_on_pr or get_findings for review results.';
+
+export const BLAST_PARTIAL_NEXT =
+  'The code index is partial; the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.';
+
+/** `next` hint per degraded reason (the reasons of the blast route's `reason` field). */
+export const blastNext = (reason: string): string => {
+  switch (reason) {
+    case 'flag_off':
+      return BLAST_FLAG_OFF_NEXT;
+    case 'no_data':
+      return BLAST_NO_DATA_NEXT;
+    case 'index_failed':
+      return BLAST_INDEX_FAILED_NEXT;
+    case 'repo_too_large':
+      return BLAST_TOO_LARGE_NEXT;
+    default:
+      return BLAST_PARTIAL_NEXT;
+  }
+};
+
+export const blastScope = (max: number): string => `direct callers (depth 1), max ${max} per symbol`;
 
 export const AGENTS_EMPTY_NEXT =
   'No agents configured. Create one in the DevDigest studio (Agents page).';

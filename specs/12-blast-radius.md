@@ -335,6 +335,30 @@ The client copy of `adapters.ts` has **already drifted** (`GitHubClient` starts 
 
 §7.1–7.4 are done. Rev 4:
 
+### 7.3 MCP texts (spec of record; supersedes spec 11 §7b.5)
+
+Source of truth for `mcp/src/texts.ts`; pinned byte for byte in `mcp/test/verbatim.test.ts`.
+
+| Key (`mcp/src/texts.ts`) | Text, byte for byte |
+|---|---|
+| `TOOL_TEXTS.get_blast_radius.title` | `PR blast radius` |
+| `TOOL_TEXTS.get_blast_radius.description` | `Map what a pull request (PR) can break: symbols declared in the changed files, their callers (file:line) and the HTTP endpoints and cron jobs behind them. Call before reviewing a PR. Read-only, from the code index.` |
+| `prNotFound(pr, repo, tool = 'run_agent_on_pr')` | `` `PR #${pr} not found in ${repo}. Check the number with gh pr list --repo ${repo}; if it is listed, open the PR in the DevDigest studio to sync it, then call ${tool} again.` `` |
+| `BLAST_FLAG_OFF_NEXT` (`flag_off`) | `Repo intelligence is off (REPO_INTEL_ENABLED=false), so there is no map. Enable it, restart the DevDigest API, index the repo, then call get_blast_radius again.` |
+| `BLAST_NO_DATA_NEXT` (`no_data`) | `The repo is not indexed yet, so the map is empty. Index it by resyncing the repo in the DevDigest studio, then call get_blast_radius again.` |
+| `BLAST_INDEX_FAILED_NEXT` (`index_failed`) | `Indexing failed, so the map is empty or stale. Retry by resyncing the repo in the DevDigest studio, then call get_blast_radius again.` |
+| `BLAST_TOO_LARGE_NEXT` (`repo_too_large`) | `The repo is too large to index, so no map is possible for it. Use run_agent_on_pr or get_findings for review results.` |
+| `BLAST_PARTIAL_NEXT` (`index_partial`) | `The code index is partial; the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.` |
+| `blastScope(max)` | `` `direct callers (depth 1), max ${max} per symbol` `` |
+
+**Answer** (`blastAnswer(repo, pr, data)`, compact JSON through `toText(obj, 'downstream')`; callers are `"file:line name"` strings; `truncated: true` appears on a group only when its callers were cut by the per-symbol cap; `next` appears only when `degraded`):
+```json
+{"repo":"OlegDEma/dev-digest","pr":7,"summary":"…","scope":"direct callers (depth 1), max 20 per symbol",
+ "counts":{"symbols":2,"callers":11,"endpoints":3,"crons":0},"degraded":false,"reason":null,
+ "downstream":[{"symbol":"getContext","callers":["server/src/modules/intent/routes.ts:22 intentRoutes"],"endpoints":["GET /pulls/:id/intent"],"crons":[]},
+               {"symbol":"RequestContext","callers":[],"endpoints":[],"crons":[]}]}
+```
+
 ### 7.5 Layout and cards (D25, D26)
 - `OverviewTab/styles.ts`: `twoCol: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))", gap: 16, alignItems: "start" }`.
 - `OverviewTab.tsx`: `<div style={s.twoCol}><IntentCard …/><BlastRadiusCard …/></div>`, then the Description.

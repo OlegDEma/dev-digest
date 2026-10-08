@@ -43,6 +43,13 @@ describe('toPrBlastResponse', () => {
     expect(a.callers.map((c) => c.file)).toEqual(['r1.ts', 'r2.ts']);
   });
 
+  it('marks a group truncated only when callers were cut', () => {
+    expect(res.downstream.find((g) => g.symbol === 'a')!.truncated).toBe(true);
+    expect(res.downstream.find((g) => g.symbol === 'b')!.truncated).toBe(false);
+    const facade = toPrBlastResponse({ ...base, callers: [caller('r1.ts', 'b', 5)], truncatedSymbols: ['b'] }, meta);
+    expect(facade.downstream.find((g) => g.symbol === 'b')!.truncated).toBe(true);
+  });
+
   it('lists zero-caller symbols last', () => {
     expect(res.downstream.map((g) => g.symbol)).toEqual(['a', 'b', 'z']);
     expect(res.downstream[2]!.callers).toEqual([]);

@@ -61,6 +61,16 @@ describe('HistoryService.get', () => {
     expect(await t.service.get('ws', 'p', t.log)).toMatchObject({ available: false, reason: 'github_error' });
   });
 
+  it('github_error is remembered briefly so a failing token is not hammered', async () => {
+    const t = setup();
+    t.spy.mockImplementation(async () => {
+      throw new Error('boom');
+    });
+    await t.service.get('ws', 'p', t.log);
+    expect(await t.service.get('ws', 'p', t.log)).toMatchObject({ available: false, reason: 'github_error' });
+    expect(t.spy).toHaveBeenCalledTimes(1);
+  });
+
   it('no pr_files -> empty and available, no port call', async () => {
     const t = setup({ prFiles: [] });
     expect(await t.service.get('ws', 'p', t.log)).toEqual({ history: [], available: true, reason: null });

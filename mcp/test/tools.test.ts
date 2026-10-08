@@ -366,8 +366,30 @@ describe('get_blast_radius', () => {
     );
     api.blast = { ...blast, degraded: true, reason: 'index_partial' };
     expect(jsonOf(await client.callTool({ name: 'get_blast_radius', arguments: args })).next).toBe(
-      T.blastIndexNext('index_partial'),
+      T.BLAST_PARTIAL_NEXT,
     );
+  });
+
+  it('no_data and the other reasons each get their own hint', async () => {
+    const api = new FakeApi();
+    const { client } = await connect(api);
+    for (const [reason, next] of [
+      ['no_data', T.BLAST_NO_DATA_NEXT],
+      ['index_failed', T.BLAST_INDEX_FAILED_NEXT],
+      ['repo_too_large', T.BLAST_TOO_LARGE_NEXT],
+    ] as const) {
+      api.blast = { ...blast, degraded: true, reason };
+      expect(jsonOf(await client.callTool({ name: 'get_blast_radius', arguments: args })).next).toBe(next);
+    }
+  });
+
+  it('passes truncated through only when a group was cut', async () => {
+    const api = new FakeApi();
+    api.blast = { ...blast, downstream: blast.downstream.map((d, i) => ({ ...d, truncated: i === 0 })) };
+    const { client } = await connect(api);
+    const out = jsonOf(await client.callTool({ name: 'get_blast_radius', arguments: args }));
+    expect(out.downstream[0].truncated).toBe(true);
+    expect(out.downstream[1].truncated).toBeUndefined();
   });
 
   it('a route 404 becomes an API-error text', async () => {

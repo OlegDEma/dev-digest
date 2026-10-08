@@ -111,9 +111,20 @@ describe('error and result templates', () => {
     expect(T.BLAST_FLAG_OFF_NEXT).toBe(
       'Repo intelligence is off (REPO_INTEL_ENABLED=false), so there is no map. Enable it, restart the DevDigest API, index the repo, then call get_blast_radius again.',
     );
-    expect(T.blastIndexNext('index_partial')).toBe(
-      'The code index is incomplete (index_partial); the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.',
+    expect(T.BLAST_NO_DATA_NEXT).toBe(
+      'The repo is not indexed yet, so the map is empty. Index it by resyncing the repo in the DevDigest studio, then call get_blast_radius again.',
     );
+    expect(T.BLAST_INDEX_FAILED_NEXT).toBe(
+      'Indexing failed, so the map is empty or stale. Retry by resyncing the repo in the DevDigest studio, then call get_blast_radius again.',
+    );
+    expect(T.BLAST_TOO_LARGE_NEXT).toBe(
+      'The repo is too large to index, so no map is possible for it. Use run_agent_on_pr or get_findings for review results.',
+    );
+    expect(T.BLAST_PARTIAL_NEXT).toBe(
+      'The code index is partial; the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.',
+    );
+    expect(T.blastNext('index_partial')).toBe(T.BLAST_PARTIAL_NEXT);
+    expect(T.blastScope(20)).toBe('direct callers (depth 1), max 20 per symbol');
     expect(err(new ToolFailure('already final'))).toBe('already final');
   });
 

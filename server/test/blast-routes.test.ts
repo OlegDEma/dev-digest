@@ -19,7 +19,7 @@ const stubAuth = {
 
 const valid = {
   changed_symbols: [{ name: 'a', file: 'd.ts', kind: 'function' }],
-  downstream: [{ symbol: 'a', callers: [], endpoints_affected: [], crons_affected: [] }],
+  downstream: [{ symbol: 'a', callers: [], endpoints_affected: [], crons_affected: [], truncated: false }],
   summary: '1 changed symbol, no downstream callers found.',
   counts: { symbols: 1, callers: 0, endpoints: 0, crons: 0 },
   degraded: false,

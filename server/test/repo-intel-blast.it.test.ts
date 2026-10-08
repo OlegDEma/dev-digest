@@ -41,7 +41,7 @@ d('getBlastRadius(fallback:false): same-file reference takes no cap slot', () =>
       endLine: 2,
       exported: true,
     });
-    const callerFiles = Array.from({ length: 20 }, (_, i) => `c${i}.ts`);
+    const callerFiles = Array.from({ length: 25 }, (_, i) => `c${i}.ts`);
     await db.insert(t.fileRank).values(
       [...callerFiles, 'decl.ts'].map((filePath, i) => ({
         repoId,
@@ -67,10 +67,11 @@ d('getBlastRadius(fallback:false): same-file reference takes no cap slot', () =>
     await pg?.stop();
   });
 
-  it('returns exactly 20 cross-file callers and none from the declaring file', async () => {
+  it('returns exactly 20 of 25 cross-file callers (cut in SQL, flagged truncated) and none from the declaring file', async () => {
     const res = await svc.getBlastRadius(repoId, ['decl.ts'], { fallback: false });
     const a = res.callers.filter((c) => c.viaSymbol === 'a');
     expect(a).toHaveLength(20);
+    expect(res.truncatedSymbols).toEqual(['a']);
     expect(a.some((c) => c.file === 'decl.ts')).toBe(false);
   });
 });

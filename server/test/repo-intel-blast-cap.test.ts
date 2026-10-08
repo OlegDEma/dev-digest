@@ -43,6 +43,7 @@ describe('RepoIntel.getBlastRadius — index only + per-symbol cap', () => {
     expect(res.degraded).toBe(false);
     expect(res.callers.filter((c) => c.viaSymbol === 'a')).toHaveLength(20);
     expect(res.callers.filter((c) => c.viaSymbol === 'b')).toHaveLength(3);
+    expect(res.truncatedSymbols).toEqual(['a']);
     const ranks = res.callers.map((c) => c.rank);
     expect(ranks).toEqual([...ranks].sort((x, y) => y - x));
     expect(symbolsSpy).not.toHaveBeenCalled();

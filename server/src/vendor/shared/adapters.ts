@@ -153,6 +153,10 @@ export interface HistoryLimits {
   maxFiles: number;
   perFileCommits: number;
   maxCommits: number;
+  /** Overall budget for the whole fan-out; the call rejects once it is spent. */
+  deadlineMs: number;
+  /** How many PR lookups may run at once. */
+  concurrency: number;
 }
 
 export interface GitHubClient {

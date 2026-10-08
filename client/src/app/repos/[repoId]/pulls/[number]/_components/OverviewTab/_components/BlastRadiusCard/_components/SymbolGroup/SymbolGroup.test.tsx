@@ -21,6 +21,7 @@ const one = {
   callers: [{ name: "intentRoutes", file: "src/a.ts", line: 23 }],
   endpoints_affected: ["GET /x"],
   crons_affected: ["nightly"],
+  truncated: false,
 };
 
 describe("SymbolGroup", () => {
@@ -48,7 +49,7 @@ describe("SymbolGroup", () => {
   });
 
   it("zero-caller row is static; cap hint only at the cap; plural", () => {
-    renderGroup({ symbol: "Lonely", callers: [], endpoints_affected: [], crons_affected: [] });
+    renderGroup({ symbol: "Lonely", callers: [], endpoints_affected: [], crons_affected: [], truncated: false });
     expect(screen.getByText("no callers")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     cleanup();
@@ -64,13 +65,13 @@ describe("SymbolGroup", () => {
     expect(screen.getByText("2 callers")).toBeInTheDocument();
     expect(screen.queryByText(/Top 5 callers/)).not.toBeInTheDocument();
     cleanup();
-    renderGroup(two, 2);
+    renderGroup({ ...two, truncated: true }, 2);
     expect(screen.getByText("Top 2 callers by rank")).toBeInTheDocument();
   });
 
   it("caps chips at 6 and reveals the rest on '+N more'", () => {
     const endpoints = Array.from({ length: 8 }, (_, i) => `GET /e${i}`);
-    renderGroup({ ...one, endpoints_affected: endpoints, crons_affected: [] });
+    renderGroup({ ...one, endpoints_affected: endpoints, crons_affected: [], truncated: false });
     const chips = screen.getByTestId("endpoint-chips");
     expect(within(chips).getAllByText(/GET \/e/)).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "+2 more" }));

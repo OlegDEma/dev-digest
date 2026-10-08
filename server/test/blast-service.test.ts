@@ -10,6 +10,7 @@ function setup(opts: {
   state?: Record<string, unknown> | null;
   pull?: unknown;
   diffFiles?: string[];
+  flagOff?: boolean;
 }) {
   const symbolsSpy = vi.fn(async () => []);
   const referencesSpy = vi.fn(async () => []);
@@ -17,10 +18,10 @@ function setup(opts: {
   const githubSpy = vi.fn(async () => {
     throw new Error('blast must not call GitHub');
   });
-  const diff = vi.fn(async () => ({ files: (opts.diffFiles ?? []).map((path) => ({ path })) }));
+  const diff = vi.fn(async (..._a: unknown[]) => ({ files: (opts.diffFiles ?? []).map((path) => ({ path })) }));
   const container = {
     db: {},
-    config: { repoIntelEnabled: true },
+    config: { repoIntelEnabled: !opts.flagOff },
     codeIndex: { symbols: symbolsSpy, references: referencesSpy },
     llm,
     git: { diff },
@@ -44,13 +45,14 @@ function setup(opts: {
     getPrFiles: async () => (opts.prFiles ?? ['decl.ts']).map((path) => ({ path })),
     getRepo: async () => ({ owner: 'acme', name: 'w' }),
   };
+  const warnings: unknown[] = [];
   const logs: { obj: Record<string, unknown>; msg?: string }[] = [];
   const log = {
     info: (obj: unknown, msg?: string) => void logs.push({ obj: obj as Record<string, unknown>, msg }),
-    warn: () => {},
+    warn: (obj: unknown) => void warnings.push(obj),
   };
   const service = new BlastService(container, reviews as never);
-  return { service, githubSpy, symbolsSpy, referencesSpy, llm, diff, spy, logs, log };
+  return { service, warnings, githubSpy, symbolsSpy, referencesSpy, llm, diff, spy, logs, log };
 }
 
 describe('BlastService.get (hermetic, real RepoIntelService)', () => {
@@ -81,6 +83,22 @@ describe('BlastService.get (hermetic, real RepoIntelService)', () => {
     await t.service.get('ws', 'pr1', t.log);
     expect(t.diff).toHaveBeenCalledWith({ owner: 'acme', name: 'w' }, 'main', 'head1');
     expect(t.logs[0]!.obj).toMatchObject({ changed_files_source: 'git_diff', changed_files: 1 });
+  });
+
+  it('git diff failure with no pr_files -> degraded no_data, warned, not an authoritative empty map', async () => {
+    const t = setup({ prFiles: [], state: { status: 'full' } });
+    t.diff.mockImplementation(async () => {
+      throw new Error('bad ref');
+    });
+    const res = await t.service.get('ws', 'pr1', t.log);
+    expect(res).toMatchObject({ degraded: true, reason: 'no_data' });
+    expect(t.warnings).toHaveLength(1);
+  });
+
+  it('flag off still surfaces flag_off when there are no files', async () => {
+    const t = setup({ prFiles: [], state: { status: 'full' }, flagOff: true });
+    const res = await t.service.get('ws', 'pr1', t.log);
+    expect(res).toMatchObject({ degraded: true, reason: 'flag_off' });
   });
 
   it('unknown PR -> NotFoundError', async () => {

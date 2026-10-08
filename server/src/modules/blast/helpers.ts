@@ -1,4 +1,4 @@
-import type { BlastCounts, BlastDegradedReason, DownstreamImpact, PrBlastResponse } from '@devdigest/shared';
+import type { BlastCounts, BlastDegradedReason, PrBlastResponse } from '@devdigest/shared';
 import type { BlastResult, DegradedReason, IndexState } from '../repo-intel/types.js';
 import { TEST_PATH_PATTERNS } from '../repo-intel/constants.js';
 
@@ -58,11 +58,15 @@ export function toPrBlastResponse(result: BlastResult, meta: BlastMeta): PrBlast
     declFiles.get(s.name)!.add(s.file);
   }
 
+  const truncatedByMapper = new Set<string>();
   const bySymbol = new Map<string, { name: string; file: string; line: number; rank: number }[]>();
   for (const c of result.callers) {
     if (declFiles.get(c.viaSymbol)?.has(c.file)) continue;
     const list = bySymbol.get(c.viaSymbol) ?? [];
-    if (list.length >= meta.maxCallers) continue;
+    if (list.length >= meta.maxCallers) {
+      truncatedByMapper.add(c.viaSymbol);
+      continue;
+    }
     list.push({ name: c.symbol, file: c.file, line: c.line, rank: c.rank });
     bySymbol.set(c.viaSymbol, list);
   }
@@ -83,11 +87,12 @@ export function toPrBlastResponse(result: BlastResult, meta: BlastMeta): PrBlast
     }
     endpoints.forEach((e) => allEndpoints.add(e));
     crons.forEach((c) => allCrons.add(c));
-    const impact: DownstreamImpact = {
+    const impact: PrBlastResponse['downstream'][number] = {
       symbol,
       callers: rows.map(({ name, file, line }) => ({ name, file, line })),
       endpoints_affected: uniqSorted(endpoints),
       crons_affected: uniqSorted(crons),
+      truncated: truncatedByMapper.has(symbol) || (result.truncatedSymbols?.includes(symbol) ?? false),
     };
     return { impact, best: rows.length ? Math.max(...rows.map((r) => r.rank)) : -1 };
   });

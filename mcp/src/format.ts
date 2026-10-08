@@ -105,7 +105,7 @@ export function blastAnswer(repo: string, pr: number, data: PrBlastResponse): st
     repo,
     pr,
     summary: data.summary,
-    scope: `direct callers (depth 1), max ${data.max_callers_per_symbol} per symbol`,
+    scope: T.blastScope(data.max_callers_per_symbol),
     counts: data.counts,
     degraded: data.degraded,
     reason: data.reason,
@@ -114,10 +114,11 @@ export function blastAnswer(repo: string, pr: number, data: PrBlastResponse): st
       callers: d.callers.map((c) => `${c.file}:${c.line} ${c.name}`),
       endpoints: d.endpoints_affected,
       crons: d.crons_affected,
+      ...(d.truncated ? { truncated: true } : {}),
     })),
   };
   if (data.degraded && data.reason) {
-    obj.next = data.reason === 'flag_off' ? T.BLAST_FLAG_OFF_NEXT : T.blastIndexNext(data.reason);
+    obj.next = T.blastNext(data.reason);
   }
   return toText(obj, 'downstream');
 }

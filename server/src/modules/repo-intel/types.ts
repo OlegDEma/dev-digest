@@ -82,6 +82,8 @@ export interface BlastResult {
    * Present on the persistent (non-degraded) path; absent otherwise.
    */
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
+  /** Changed symbols that had more callers than MAX_CALLERS_PER_SYMBOL (the list is cut). */
+  truncatedSymbols?: string[];
   degraded?: boolean;
   reason?: DegradedReason;
 }

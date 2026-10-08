@@ -107,6 +107,7 @@ describe('AI contracts parse fixtures', () => {
           callers: [{ name: 'routes', file: 'b.ts', line: 3 }],
           endpoints_affected: ['GET /x'],
           crons_affected: [],
+          truncated: false,
         },
       ],
       summary: 's',

@@ -88,6 +88,8 @@ export type BlastFileFacts = z.infer<typeof BlastFileFacts>;
 
 /** GET /pulls/:id/blast. A superset of BlastRadius, so it still parses as one. */
 export const PrBlastResponse = BlastRadius.extend({
+  /** Same as BlastRadius.downstream, plus whether the caller list was cut by the per-symbol cap. */
+  downstream: z.array(DownstreamImpact.extend({ truncated: z.boolean() })),
   counts: BlastCounts,
   degraded: z.boolean(),
   reason: BlastDegradedReason.nullable(),

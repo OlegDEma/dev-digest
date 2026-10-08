@@ -7,13 +7,16 @@ import blast from "../../../../../../../../../../messages/en/blast.json";
 import brief from "../../../../../../../../../../messages/en/brief.json";
 
 const state = vi.hoisted(() => ({
-  query: { data: undefined as unknown, isLoading: false, isError: false },
+  query: { data: undefined as unknown, isPending: false, isError: false },
   mutate: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
 }));
 
-vi.mock("../../../../../../../../../lib/hooks/blast", () => ({ usePrBlast: () => state.query }));
+vi.mock("../../../../../../../../../lib/hooks/blast", () => ({
+  usePrBlast: () => state.query,
+  blastQueryKey: (id: string) => ["pull-blast", id],
+}));
 vi.mock("../../../../../../../../../lib/hooks/repo-intel", () => ({
   useResyncRepoIntel: () => ({ mutate: state.mutate, isPending: false }),
 }));
@@ -28,9 +31,10 @@ import { BlastRadiusCard } from "./BlastRadiusCard";
 
 afterEach(cleanup);
 beforeEach(() => {
-  state.query = { data: undefined, isLoading: false, isError: false };
+  state.query = { data: undefined, isPending: false, isError: false };
   state.mutate = vi.fn();
   state.success.mockClear();
+  state.error.mockClear();
 });
 
 const base: PrBlastResponse = {
@@ -44,8 +48,9 @@ const base: PrBlastResponse = {
       callers: [{ name: "intentRoutes", file: "src/a.ts", line: 23 }],
       endpoints_affected: ["GET /x"],
       crons_affected: [],
+      truncated: false,
     },
-    { symbol: "Lonely", callers: [], endpoints_affected: [], crons_affected: [] },
+    { symbol: "Lonely", callers: [], endpoints_affected: [], crons_affected: [], truncated: false },
   ],
   summary: "2 changed symbols · 1 caller · 1 endpoint · 0 crons",
   counts: { symbols: 2, callers: 1, endpoints: 1, crons: 0 },
@@ -56,13 +61,13 @@ const base: PrBlastResponse = {
   facts_by_file: { "src/a.ts": { endpoints: ["GET /x"], crons: [] } },
 };
 
-function renderCard() {
+function renderCard(repoFullName: string | null = "acme/w") {
   const qc = new QueryClient();
   const spy = vi.spyOn(qc, "invalidateQueries");
   render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ blast, brief }}>
-        <BlastRadiusCard prId="p1" repoId="r1" repoFullName="acme/w" headSha="head1" />
+        <BlastRadiusCard prId="p1" repoId="r1" repoFullName={repoFullName} headSha="head1" />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
@@ -71,7 +76,7 @@ function renderCard() {
 
 describe("BlastRadiusCard", () => {
   it("shows title, counts, scope hint and tree rows, then switches to the graph", () => {
-    state.query = { data: base, isLoading: false, isError: false };
+    state.query = { data: base, isPending: false, isError: false };
     renderCard();
     expect(screen.getByText("Blast radius")).toBeInTheDocument();
     expect(screen.getByText("Direct callers (depth 1) · max 7 per symbol")).toBeInTheDocument();
@@ -99,8 +104,8 @@ describe("BlastRadiusCard", () => {
 
   it("keeps the title inside the card while loading and on error", () => {
     for (const q of [
-      { data: undefined, isLoading: true, isError: false },
-      { data: undefined, isLoading: false, isError: true },
+      { data: undefined, isPending: true, isError: false },
+      { data: undefined, isPending: false, isError: true },
     ]) {
       state.query = q;
       renderCard();
@@ -113,7 +118,7 @@ describe("BlastRadiusCard", () => {
   it("uses plural stat labels", () => {
     state.query = {
       data: { ...base, counts: { symbols: 1, callers: 2, endpoints: 1, crons: 2 } },
-      isLoading: false,
+      isPending: false,
       isError: false,
     };
     const { container } = render(
@@ -137,6 +142,7 @@ describe("BlastRadiusCard", () => {
       callers: [{ name: "fn", file: `src/f${i}.ts`, line: i + 1 }],
       endpoints_affected: [],
       crons_affected: [],
+      truncated: false,
     }));
     state.query = {
       data: {
@@ -145,7 +151,7 @@ describe("BlastRadiusCard", () => {
         downstream: rows,
         counts: { symbols: 12, callers: 12, endpoints: 0, crons: 0 },
       },
-      isLoading: false,
+      isPending: false,
       isError: false,
     };
     renderCard();
@@ -163,7 +169,7 @@ describe("BlastRadiusCard", () => {
         downstream: base.downstream.map((g) => ({ ...g, callers: [], endpoints_affected: [] })),
         counts: { symbols: 2, callers: 0, endpoints: 0, crons: 0 },
       },
-      isLoading: false,
+      isPending: false,
       isError: false,
     };
     renderCard();
@@ -171,10 +177,42 @@ describe("BlastRadiusCard", () => {
     expect(screen.getAllByText("no callers")).toHaveLength(2);
   });
 
+  it("Resync failure shows an error toast", () => {
+    state.query = { data: { ...base, degraded: true, reason: "index_failed" }, isPending: false, isError: false };
+    state.mutate = vi.fn((_v: unknown, opts: { onError: () => void }) => opts.onError());
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "Resync" }));
+    expect(state.error).toHaveBeenCalledWith("Could not start resync");
+  });
+
+  it("flag off / too large: badge only, no Resync button", () => {
+    for (const reason of ["flag_off", "repo_too_large"] as const) {
+      state.query = { data: { ...base, degraded: true, reason }, isPending: false, isError: false };
+      renderCard();
+      expect(screen.getByText(/Incomplete index/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Resync" })).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it("without a repo name, callers are plain text, not links", () => {
+    state.query = { data: base, isPending: false, isError: false };
+    renderCard(null);
+    expect(screen.getByText("src/a.ts:23")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "src/a.ts:23" })).not.toBeInTheDocument();
+  });
+
+  it("a query paused before it has data shows the skeleton, not an error", () => {
+    state.query = { data: undefined, isPending: true, isError: false };
+    renderCard();
+    expect(screen.getByText("Blast radius")).toBeInTheDocument();
+    expect(screen.queryByText(/Could not|Something/i)).not.toBeInTheDocument();
+  });
+
   it("no symbols declared", () => {
     state.query = {
       data: { ...base, changed_symbols: [], downstream: [], counts: { symbols: 0, callers: 0, endpoints: 0, crons: 0 } },
-      isLoading: false,
+      isPending: false,
       isError: false,
     };
     renderCard();
@@ -182,7 +220,7 @@ describe("BlastRadiusCard", () => {
   });
 
   it("degraded: badge with reason; Resync toasts and invalidates the blast query", () => {
-    state.query = { data: { ...base, degraded: true, reason: "index_partial" }, isLoading: false, isError: false };
+    state.query = { data: { ...base, degraded: true, reason: "index_partial" }, isPending: false, isError: false };
     state.mutate = vi.fn((_v: unknown, opts: { onSuccess: () => void }) => opts.onSuccess());
     const spy = renderCard();
     expect(screen.getByText("Incomplete index — partial index")).toBeInTheDocument();

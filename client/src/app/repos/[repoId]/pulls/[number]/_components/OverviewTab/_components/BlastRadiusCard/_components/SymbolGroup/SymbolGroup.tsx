@@ -4,12 +4,12 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import type { DownstreamImpact } from "@devdigest/shared";
+import type { PrBlastResponse } from "@devdigest/shared";
 import { Badge, Button, Icon, MonoLink } from "@devdigest/ui";
 import { CHIP_MAX, s } from "./styles";
 
 interface SymbolGroupProps {
-  group: DownstreamImpact;
+  group: PrBlastResponse["downstream"][number];
   /** Per-symbol caller cap from the response; the "top N" hint shows when it is reached. */
   cap: number;
   defaultOpen: boolean;
@@ -64,7 +64,7 @@ export function SymbolGroup({ group, cap, defaultOpen, hrefFor }: SymbolGroupPro
               </div>
             );
           })}
-          {count === cap && <div style={s.hint}>{t("capped", { max: cap })}</div>}
+          {group.truncated && <div style={s.hint}>{t("capped", { max: cap })}</div>}
           {endpoints.length > 0 && (
             <div data-testid="endpoint-chips" style={s.chips}>
               {endpoints.map((e) => (

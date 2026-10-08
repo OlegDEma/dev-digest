@@ -355,7 +355,13 @@ export class RepoIntelService implements RepoIntel {
     }
 
     // Resolved cross-file callers.
-    const callerRows = await this.repo.getResolvedCallers(repoId, changedFiles, [...nameSet]);
+    const callerRows = await this.repo.getResolvedCallers(
+      repoId,
+      changedFiles,
+      [...nameSet],
+      // one past the cap: seeing it is how we know the list was cut
+      MAX_CALLERS_PER_SYMBOL + 1,
+    );
     const callerFiles = [...new Set(callerRows.map((c) => c.fromPath))];
 
     // Enclosing caller symbol from the callers' persistent symbol rows.
@@ -400,6 +406,7 @@ export class RepoIntelService implements RepoIntel {
     return {
       changedSymbols,
       callers: capPerSymbol(callers, MAX_CALLERS_PER_SYMBOL),
+      truncatedSymbols: overCap(callers, MAX_CALLERS_PER_SYMBOL),
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
@@ -761,6 +768,13 @@ function isJunkPath(path: string, includeTests = false): boolean {
     ? JUNK_PATH_PATTERNS.filter((p) => !TEST_PATH_SET.has(p))
     : JUNK_PATH_PATTERNS;
   return patterns.some((p) => lower.includes(p));
+}
+
+/** `viaSymbol`s that have more than `max` rows. */
+function overCap(rows: BlastCallerRow[], max: number): string[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.viaSymbol, (counts.get(r.viaSymbol) ?? 0) + 1);
+  return [...counts].filter(([, n]) => n > max).map(([name]) => name);
 }
 
 /** Keeps the first `max` rows (already rank-desc) for each `viaSymbol`. */

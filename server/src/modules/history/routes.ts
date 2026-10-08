@@ -18,7 +18,7 @@ export default async function historyRoutes(appBase: FastifyInstance) {
     '/pulls/:id/history',
     {
       schema: { params: IdParams, response: { 200: PrHistoryResponse } },
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
     },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
