@@ -3,6 +3,7 @@ import type {
   Agent,
   ConventionCandidate,
   FindingRecord,
+  PrBlastResponse,
   PrMeta,
   Repo,
   ReviewRunResponse,
@@ -133,6 +134,35 @@ export const convention = (
   created_at: 'now',
 });
 
+export const blast: PrBlastResponse = {
+  changed_symbols: [
+    { name: 'getContext', file: 'src/ctx.ts', kind: 'function' },
+    { name: 'RequestContext', file: 'src/ctx.ts', kind: 'type' },
+  ],
+  downstream: [
+    {
+      symbol: 'getContext',
+      callers: [
+        { name: 'intentRoutes', file: 'src/intent/routes.ts', line: 22 },
+        { name: 'blastRoutes', file: 'src/blast/routes.ts', line: 14 },
+      ],
+      endpoints_affected: ['GET /pulls/:id/blast', 'GET /pulls/:id/intent'],
+      crons_affected: [],
+    },
+    { symbol: 'RequestContext', callers: [], endpoints_affected: [], crons_affected: [] },
+  ],
+  summary: '2 changed symbols · 2 callers · 2 endpoints · 0 crons',
+  counts: { symbols: 2, callers: 2, endpoints: 2, crons: 0 },
+  degraded: false,
+  reason: null,
+  index_sha: 'idx1',
+  max_callers_per_symbol: 20,
+  facts_by_file: {
+    'src/intent/routes.ts': { endpoints: ['GET /pulls/:id/intent'], crons: [] },
+    'src/blast/routes.ts': { endpoints: ['GET /pulls/:id/blast'], crons: [] },
+  },
+};
+
 type Step = RunDetail | Error;
 
 /** In-memory DevDigestApi: a call log and a scripted `getRun` sequence (last step repeats). */
@@ -145,6 +175,8 @@ export class FakeApi implements DevDigestApi {
   conventions: ConventionCandidate[] = [];
   runs: Step[] = [runningDetail()];
   failAll: Error | null = null;
+  blast: PrBlastResponse = blast;
+  blastError: Error | null = null;
   getRunSignals: (AbortSignal | undefined)[] = [];
   private runIdx = 0;
 
@@ -192,6 +224,11 @@ export class FakeApi implements DevDigestApi {
   async listConventions(): Promise<ConventionCandidate[]> {
     this.enter('listConventions');
     return this.conventions;
+  }
+  async getBlast(_prId: string): Promise<PrBlastResponse> {
+    this.enter('getBlast');
+    if (this.blastError) throw this.blastError;
+    return this.blast;
   }
 }
 

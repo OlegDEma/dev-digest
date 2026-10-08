@@ -67,6 +67,39 @@ export const BlastRadius = z.object({
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 
+// ---- Blast radius: PR route response (spec 12) ----
+// Lowercase snake_case values; mirrors repo-intel's DegradedReason (server/src/modules/repo-intel/types.ts:26).
+export const BlastDegradedReason = z.enum(['flag_off', 'index_failed', 'index_partial', 'repo_too_large', 'no_data']);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
+export const BlastCounts = z.object({
+  symbols: z.number().int(),
+  callers: z.number().int(),
+  endpoints: z.number().int(),
+  crons: z.number().int(),
+});
+export type BlastCounts = z.infer<typeof BlastCounts>;
+
+export const BlastFileFacts = z.object({
+  endpoints: z.array(z.string()),
+  crons: z.array(z.string()),
+});
+export type BlastFileFacts = z.infer<typeof BlastFileFacts>;
+
+/** GET /pulls/:id/blast. A superset of BlastRadius, so it still parses as one. */
+export const PrBlastResponse = BlastRadius.extend({
+  counts: BlastCounts,
+  degraded: z.boolean(),
+  reason: BlastDegradedReason.nullable(),
+  /** Commit the index was built at; caller lines refer to it. */
+  index_sha: z.string().nullable(),
+  /** MAX_CALLERS_PER_SYMBOL, so clients never hard-code the cap. */
+  max_callers_per_symbol: z.number().int(),
+  /** Each caller file's own endpoints/crons (only files present in downstream callers). */
+  facts_by_file: z.record(z.string(), BlastFileFacts),
+});
+export type PrBlastResponse = z.infer<typeof PrBlastResponse>;
+
 // ---- Risks ----
 export const RiskSeverity = z.enum(['high', 'medium', 'low']);
 export type RiskSeverity = z.infer<typeof RiskSeverity>;
@@ -100,6 +133,17 @@ export const PrHistory = z.object({
   history: z.array(PrHistoryItem),
 });
 export type PrHistory = z.infer<typeof PrHistory>;
+
+// ---- PR history: route response (spec 12 rev 4) ----
+export const PrHistoryUnavailableReason = z.enum(['no_token', 'github_error']);
+export type PrHistoryUnavailableReason = z.infer<typeof PrHistoryUnavailableReason>;
+
+/** GET /pulls/:id/history. A superset of PrHistory; `available:false` when GitHub cannot be asked. */
+export const PrHistoryResponse = PrHistory.extend({
+  available: z.boolean(),
+  reason: PrHistoryUnavailableReason.nullable(),
+});
+export type PrHistoryResponse = z.infer<typeof PrHistoryResponse>;
 
 // ---- Smart Diff ----
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);

@@ -13,7 +13,7 @@
  * raw-SQL probes below MUST swallow `undefined_table` (Postgres 42P01) so the
  * facade keeps returning degraded — never throws.
  */
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
@@ -525,6 +525,7 @@ export class RepoIntelRepository {
         and(
           eq(t.references.repoId, repoId),
           inArray(t.references.declFile, declFiles),
+          ne(t.references.fromPath, t.references.declFile),
           inArray(t.references.toSymbol, names),
         ),
       );

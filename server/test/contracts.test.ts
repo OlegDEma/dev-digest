@@ -6,6 +6,9 @@ import {
   IntentSource,
   PrIntentResponse,
   BlastRadius,
+  PrBlastResponse,
+  PrHistoryResponse,
+  PrHistory,
   Risks,
   PrHistory,
   SmartDiff,
@@ -96,6 +99,35 @@ describe('AI contracts parse fixtures', () => {
         summary: 's',
       }),
     ).not.toThrow();
+    const blast = {
+      changed_symbols: [{ name: 'getContext', file: 'a.ts', kind: 'function' }],
+      downstream: [
+        {
+          symbol: 'getContext',
+          callers: [{ name: 'routes', file: 'b.ts', line: 3 }],
+          endpoints_affected: ['GET /x'],
+          crons_affected: [],
+        },
+      ],
+      summary: 's',
+      counts: { symbols: 1, callers: 1, endpoints: 1, crons: 0 },
+      degraded: false,
+      reason: null,
+      index_sha: 'abc',
+      max_callers_per_symbol: 20,
+      facts_by_file: { 'b.ts': { endpoints: ['GET /x'], crons: [] } },
+    };
+    expect(() => PrBlastResponse.parse(blast)).not.toThrow();
+    expect(() => BlastRadius.parse(blast)).not.toThrow();
+    expect(() => PrBlastResponse.parse({ ...blast, degraded: true, reason: 'FLAG_OFF' })).toThrow();
+    const hist = {
+      history: [{ pr_number: 3, title: 't', merged_at: '2026-01-01T00:00:00Z', author: 'a', files_overlap: ['a.ts'], notes: '' }],
+      available: true,
+      reason: null,
+    };
+    expect(() => PrHistoryResponse.parse(hist)).not.toThrow();
+    expect(() => PrHistory.parse(hist)).not.toThrow();
+    expect(() => PrHistoryResponse.parse({ ...hist, available: false, reason: 'NO_TOKEN' })).toThrow();
     expect(() =>
       Risks.parse({
         risks: [{ kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: [] }],

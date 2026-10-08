@@ -20,10 +20,11 @@ export async function resolvePr(
   api: DevDigestApi,
   repo: Repo,
   pr: number,
+  tool = 'run_agent_on_pr',
 ): Promise<PrMeta & { id: string }> {
   const pulls = await api.listPulls(repo.id);
   const hit = pulls.find((p) => p.number === pr);
-  if (!hit || !hit.id) throw new ToolFailure(T.prNotFound(pr, repo.full_name));
+  if (!hit || !hit.id) throw new ToolFailure(T.prNotFound(pr, repo.full_name, tool));
   return { ...hit, id: hit.id };
 }
 

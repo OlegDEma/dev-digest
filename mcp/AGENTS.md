@@ -39,8 +39,7 @@ npm start         # tsx src/index.ts — needs the API up (./scripts/dev.sh); sp
   it makes the SDK's `registerTool` types fail (see the root `INSIGHTS.md`, Tool & Library Notes, 2026-10-06).
 - `.mcp.json` sets `alwaysLoad: true` for devdigest; descriptions double as Tool Search
   keywords — keep them keyword-rich and within the `tools/list` budget (spec 11 D24, D26).
-- `get_blast_radius` is a non-error `not_implemented` stub until the homework lands; keep
-  its input schema (D27).
+- `get_blast_radius` calls `GET /pulls/:id/blast`; texts live in spec 12 §7.3 (supersedes spec 11 D27).
 - npm only: `package-lock.json` is the only lockfile (D32).
 - Aborting a waiting `run_agent_on_pr` stops polling but never cancels the server
   run; a retry re-attaches to it (agent-only match).

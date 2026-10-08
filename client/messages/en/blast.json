@@ -1,18 +1,56 @@
 {
   "stat": {
-    "symbols": "symbols",
-    "callers": "callers",
-    "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "symbols": "{count, plural, one {symbol} other {symbols}}",
+    "callers": "{count, plural, one {caller} other {callers}}",
+    "endpoints": "{count, plural, one {endpoint} other {endpoints}}",
+    "crons": "{count, plural, one {cron} other {crons}}"
   },
   "view": {
-    "tree": "tree",
-    "graph": "graph"
+    "tree": "Tree",
+    "graph": "Graph",
+    "label": "Blast radius view"
   },
-  "callerCount": "{count} callers",
+  "callerCount": "{count, plural, one {# caller} other {# callers}}",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
   "graph": {
     "empty": "No downstream callers to graph.",
-    "ariaLabel": "Blast radius graph"
+    "ariaLabel": "Blast radius graph",
+    "noEndpoints": "No endpoints or cron jobs in the caller files.",
+    "more": "+{count} more",
+    "legend": {
+      "symbol": "changed symbol",
+      "caller": "caller",
+      "endpoint": "endpoint",
+      "cron": "cron / job"
+    },
+    "symbolSelect": "Symbol to graph"
+  },
+  "scope": "Direct callers (depth 1) · max {max} per symbol",
+  "noSymbols": "No symbols are declared in the changed files.",
+  "noCallers": "no callers",
+  "capped": "Top {max} callers by rank",
+  "degraded": {
+    "label": "Incomplete index",
+    "empty": "No map: the code index is not available for this repo.",
+    "reason": {
+      "flag_off": "repo intelligence is off",
+      "index_failed": "indexing failed",
+      "index_partial": "partial index",
+      "repo_too_large": "repo too large to index",
+      "no_data": "repo not indexed yet"
+    }
+  },
+  "resync": {
+    "action": "Resync",
+    "started": "Resync started. The index refreshes in the background.",
+    "failed": "Could not start resync"
+  },
+  "showAll": "Show all {count}",
+  "chipsMore": "+{count} more",
+  "history": {
+    "title": "Prior PRs touching these files",
+    "empty": "No prior merged PRs touch these files.",
+    "unavailable": "Prior PRs unavailable",
+    "overlap": "{count, plural, one {# file} other {# files}} overlap"
   }
 }

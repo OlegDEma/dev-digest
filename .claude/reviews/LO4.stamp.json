@@ -2,15 +2,15 @@
   "skill": "pr-self-review",
   "version": "1.0.0",
   "base": "main",
-  "head": "dd2f21c1dcde7ad114c5828bd02acd548af39e66",
-  "worktree": "72bbfc01dcb8e38cfae14739b15f43b004ef4b755b277e0441a4892e29912188",
+  "head": "6aceec8e153551187484e10ce8a0fd17f185d92c",
+  "worktree": "10eac9973bac7a45ba6a6668fe570a413db1e43020781a50834256cd51d663d1",
   "mode": "report-only",
   "verdict": "warn",
   "counts": {
     "critical": 0,
-    "warning": 2,
-    "suggestion": 1
+    "warning": 10,
+    "suggestion": 14
   },
   "waivers": [],
-  "generated_at": "2026-10-08T21:19:44.072Z"
+  "generated_at": "2026-10-08T23:04:39.811Z"
 }

@@ -144,7 +144,15 @@ export interface RepoIntel {
   getIndexState(repoId: string): Promise<IndexState>;
 
   // --- Reads --------------------------------------------------------------
-  getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult>;
+  /**
+   * `opts.fallback: false` = index only: never `codeIndex` / clone reads; returns
+   * `degraded: true` plus a `reason` instead. Default `true` keeps the ripgrep fallback.
+   */
+  getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    opts?: { fallback?: boolean },
+  ): Promise<BlastResult>;
   getRepoMap(repoId: string, tokenBudget?: number): Promise<RepoMapResult>;
   getFileRank(repoId: string, paths: string[]): Promise<FileRankRow[]>;
   getSymbolsInFiles(repoId: string, paths: string[]): Promise<SymbolRow[]>;

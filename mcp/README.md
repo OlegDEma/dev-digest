@@ -10,7 +10,7 @@ tools. It is a thin HTTP wrapper; it never embeds the Fastify app. Spec:
 | `run_agent_on_pr` | Runs one agent on a PR, waits up to `DEVDIGEST_MCP_RUN_WAIT_SEC` (120 s) and returns verdict + findings | **yes** |
 | `get_findings` | Verdict + paged findings of a finished run (fallback when the wait cap hit) | no |
 | `get_conventions` | The repo's extracted conventions (accepted by default) | no |
-| `get_blast_radius` | Stub: answers `{"status":"not_implemented"}` (not an error) pointing at the other tools | no |
+| `get_blast_radius` | Symbols in a PR's changed files, their callers (`file:line`) and the endpoints/crons behind them; calls `GET /pulls/:id/blast` | no |
 
 Addressing is flat: `repo: "owner/name"`, `pr: <number>`, `agent: <name or id>`.
 

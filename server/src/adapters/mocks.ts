@@ -17,6 +17,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  PrTouchingFile,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -127,6 +128,8 @@ export interface MockGitHubOptions {
   comments?: PrReviewComment[];
   /** Repo files by path, returned by getFileContent (any ref). */
   files?: Record<string, string>;
+  /** Rows returned by listPrsTouchingFiles (default none). */
+  prsTouchingFiles?: PrTouchingFile[];
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -244,6 +247,14 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  async listPrsTouchingFiles(
+    _repo: RepoRef,
+    _files: string[],
+    _excludeNumber: number,
+  ): Promise<PrTouchingFile[]> {
+    return this.opts.prsTouchingFiles ?? [];
   }
 }
 

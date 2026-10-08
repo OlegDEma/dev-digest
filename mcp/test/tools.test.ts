@@ -4,6 +4,7 @@ import {
   DISABLED_AGENT_ID,
   FakeApi,
   RUN_ID,
+  blast,
   convention,
   finding,
   runDetail,
@@ -320,12 +321,61 @@ describe('get_conventions', () => {
 });
 
 describe('get_blast_radius', () => {
-  it('non-error not_implemented answer, with no API call (AC-25)', async () => {
+  const args = { repo: 'acme/widgets', pr: 7 };
+
+  it('returns the same map as the route, callers as compact strings', async () => {
     const api = new FakeApi();
     const { client } = await connect(api);
-    const res = await client.callTool({ name: 'get_blast_radius', arguments: { repo: 'acme/widgets', pr: 7 } });
+    const res = await client.callTool({ name: 'get_blast_radius', arguments: args });
     expect(res.isError).toBeFalsy();
-    expect(jsonOf(res)).toEqual({ status: 'not_implemented', next: T.BLAST_RADIUS_NEXT });
-    expect(api.calls).toEqual([]);
+    expect(jsonOf(res)).toEqual({
+      repo: 'acme/widgets',
+      pr: 7,
+      summary: blast.summary,
+      scope: 'direct callers (depth 1), max 20 per symbol',
+      counts: blast.counts,
+      degraded: false,
+      reason: null,
+      downstream: [
+        {
+          symbol: 'getContext',
+          callers: ['src/intent/routes.ts:22 intentRoutes', 'src/blast/routes.ts:14 blastRoutes'],
+          endpoints: ['GET /pulls/:id/blast', 'GET /pulls/:id/intent'],
+          crons: [],
+        },
+        { symbol: 'RequestContext', callers: [], endpoints: [], crons: [] },
+      ],
+    });
+  });
+
+  it('unknown PR is an error naming this tool, and never reaches getBlast', async () => {
+    const api = new FakeApi();
+    const { client } = await connect(api);
+    const res = await client.callTool({ name: 'get_blast_radius', arguments: { ...args, pr: 99 } });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe(T.prNotFound(99, 'acme/widgets', 'get_blast_radius'));
+    expect(api.count('getBlast')).toBe(0);
+  });
+
+  it('adds a next hint when the index is off or partial', async () => {
+    const api = new FakeApi();
+    api.blast = { ...blast, degraded: true, reason: 'flag_off' };
+    const { client } = await connect(api);
+    expect(jsonOf(await client.callTool({ name: 'get_blast_radius', arguments: args })).next).toBe(
+      T.BLAST_FLAG_OFF_NEXT,
+    );
+    api.blast = { ...blast, degraded: true, reason: 'index_partial' };
+    expect(jsonOf(await client.callTool({ name: 'get_blast_radius', arguments: args })).next).toBe(
+      T.blastIndexNext('index_partial'),
+    );
+  });
+
+  it('a route 404 becomes an API-error text', async () => {
+    const api = new FakeApi();
+    api.blastError = new ApiError(404, 'not_found', 'Pull request not found');
+    const { client } = await connect(api);
+    const res = await client.callTool({ name: 'get_blast_radius', arguments: args });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe(T.apiError(404, 'not_found', 'Pull request not found'));
   });
 });

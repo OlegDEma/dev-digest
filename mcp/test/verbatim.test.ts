@@ -2,9 +2,9 @@
 // catch drift. Change the spec first, then both this file and texts.ts.
 import { describe, expect, it } from 'vitest';
 import { toToolError, ApiError, ToolFailure } from '../src/errors.js';
-import { agentsAnswer, conventionsAnswer, notImplementedAnswer, reviewAnswer, runningAnswer } from '../src/format.js';
+import { agentsAnswer, blastAnswer, conventionsAnswer, reviewAnswer, runningAnswer } from '../src/format.js';
 import * as T from '../src/texts.js';
-import { FakeApi, RUN_ID, convention, finding, runDetail } from './fake-api.js';
+import { FakeApi, RUN_ID, blast, convention, finding, runDetail } from './fake-api.js';
 import { connect, textOf } from './helpers.js';
 
 const UUID = '55555555-5555-4555-8555-555555555555';
@@ -51,9 +51,9 @@ describe('tools/list wording', () => {
     expect(desc('get_conventions', 'status')).toBeUndefined();
     expect(desc('get_conventions', 'limit')).toBeUndefined();
 
-    expect(by['get_blast_radius']!.title).toBe('PR blast radius (not implemented)');
+    expect(by['get_blast_radius']!.title).toBe('PR blast radius');
     expect(by['get_blast_radius']!.description).toBe(
-      'Not implemented yet. Will map which files and symbols a pull request (PR) affects.',
+      'Map what a pull request (PR) can break: symbols declared in the changed files, their callers (file:line) and the HTTP endpoints and cron jobs behind them. Call before reviewing a PR. Read-only, from the code index.',
     );
     expect(desc('get_blast_radius', 'repo')).toBe('GitHub repo as owner/name');
     expect(desc('get_blast_radius', 'pr')).toBe('Pull request number');
@@ -105,8 +105,14 @@ describe('error and result templates', () => {
     expect(T.runNotFound(UUID)).toBe(
       `Run '${UUID}' not found. Use a run_id returned by run_agent_on_pr, or call run_agent_on_pr to start a review.`,
     );
-    expect(T.BLAST_RADIUS_NEXT).toBe(
-      'get_blast_radius is not implemented yet. Use run_agent_on_pr or get_findings for review results.',
+    expect(T.prNotFound(7, 'a/b', 'get_blast_radius')).toBe(
+      'PR #7 not found in a/b. Check the number with gh pr list --repo a/b; if it is listed, open the PR in the DevDigest studio to sync it, then call get_blast_radius again.',
+    );
+    expect(T.BLAST_FLAG_OFF_NEXT).toBe(
+      'Repo intelligence is off (REPO_INTEL_ENABLED=false), so there is no map. Enable it, restart the DevDigest API, index the repo, then call get_blast_radius again.',
+    );
+    expect(T.blastIndexNext('index_partial')).toBe(
+      'The code index is incomplete (index_partial); the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.',
     );
     expect(err(new ToolFailure('already final'))).toBe('already final');
   });
@@ -132,8 +138,8 @@ describe('error and result templates', () => {
     expect(runningAnswer(UUID, 'A', T.RUNNING_NEXT_FROM_GET)).toBe(
       `{"run_id":"${UUID}","agent":"A","status":"running","next":"Review still running. Call get_findings again in ~30s."}`,
     );
-    expect(notImplementedAnswer(T.BLAST_RADIUS_NEXT)).toBe(
-      '{"status":"not_implemented","next":"get_blast_radius is not implemented yet. Use run_agent_on_pr or get_findings for review results."}',
+    expect(blastAnswer('a/b', 7, blast)).toBe(
+      '{"repo":"a/b","pr":7,"summary":"2 changed symbols · 2 callers · 2 endpoints · 0 crons","scope":"direct callers (depth 1), max 20 per symbol","counts":{"symbols":2,"callers":2,"endpoints":2,"crons":0},"degraded":false,"reason":null,"downstream":[{"symbol":"getContext","callers":["src/intent/routes.ts:22 intentRoutes","src/blast/routes.ts:14 blastRoutes"],"endpoints":["GET /pulls/:id/blast","GET /pulls/:id/intent"],"crons":[]},{"symbol":"RequestContext","callers":[],"endpoints":[],"crons":[]}]}',
     );
     expect(agentsAnswer([])).toBe(
       '{"agents":[],"next":"No agents configured. Create one in the DevDigest studio (Agents page)."}',

@@ -11,6 +11,8 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  PrTouchingFile,
+  HistoryLimits,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -386,5 +388,54 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listPrsTouchingFiles(
+    repo: RepoRef,
+    files: string[],
+    excludeNumber: number,
+    limits: HistoryLimits,
+  ): Promise<PrTouchingFile[]> {
+    // Sequential on purpose: no burst against GitHub's secondary rate limits.
+    const pathsBySha = new Map<string, string[]>();
+    for (const path of files.slice(0, limits.maxFiles)) {
+      const commits = await withTimeout(
+        this.octokit.rest.repos.listCommits({
+          owner: repo.owner,
+          repo: repo.name,
+          path,
+          per_page: limits.perFileCommits,
+        }),
+        TIMEOUT,
+      );
+      for (const c of commits.data) {
+        if (!pathsBySha.has(c.sha) && pathsBySha.size >= limits.maxCommits) continue;
+        pathsBySha.set(c.sha, [...(pathsBySha.get(c.sha) ?? []), path]);
+      }
+    }
+    const rows: PrTouchingFile[] = [];
+    for (const [sha, paths] of pathsBySha) {
+      const prs = await withTimeout(
+        this.octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+          owner: repo.owner,
+          repo: repo.name,
+          commit_sha: sha,
+        }),
+        TIMEOUT,
+      );
+      for (const pr of prs.data) {
+        if (pr.number === excludeNumber) continue;
+        for (const path of paths) {
+          rows.push({
+            number: pr.number,
+            title: pr.title,
+            merged_at: pr.merged_at ?? null,
+            author: pr.user?.login ?? '',
+            path,
+          });
+        }
+      }
+    }
+    return rows;
   }
 }

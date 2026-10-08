@@ -1,4 +1,4 @@
-import type { ActiveRun, Agent, ConventionCandidate, PrMeta, Repo, ReviewRunResponse, RunDetail, RunRequest } from '@devdigest/shared';
+import type { ActiveRun, Agent, ConventionCandidate, PrBlastResponse, PrMeta, Repo, ReviewRunResponse, RunDetail, RunRequest } from '@devdigest/shared';
 import { ApiError } from '../errors.js';
 import type { DevDigestApi } from './port.js';
 
@@ -56,6 +56,9 @@ export class HttpDevDigestApi implements DevDigestApi {
   }
   listConventions(repoId: string): Promise<ConventionCandidate[]> {
     return this.request('GET', `/repos/${encodeURIComponent(repoId)}/conventions`);
+  }
+  getBlast(prId: string): Promise<PrBlastResponse> {
+    return this.request('GET', `/pulls/${encodeURIComponent(prId)}/blast`);
   }
 }
 

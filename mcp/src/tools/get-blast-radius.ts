@@ -1,12 +1,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { DevDigestApi } from '../api/port.js';
-import { notImplementedAnswer } from '../format.js';
+import { toToolError } from '../errors.js';
+import { blastAnswer } from '../format.js';
+import { resolvePr, resolveRepo } from '../resolve.js';
 import * as T from '../texts.js';
 import { READ_ONLY, okText, type ToolOpts } from './types.js';
 
-// Stub (D27): non-error not_implemented answer, no API request. The input schema is final for the later implementation.
-export function register(server: McpServer, _api: DevDigestApi, _opts: ToolOpts): void {
+// Thin rim over GET /pulls/:id/blast: the same map the studio shows (spec 12, D13).
+export function register(server: McpServer, api: DevDigestApi, opts: ToolOpts): void {
   server.registerTool(
     'get_blast_radius',
     {
@@ -18,6 +20,15 @@ export function register(server: McpServer, _api: DevDigestApi, _opts: ToolOpts)
       },
       annotations: READ_ONLY,
     },
-    async () => okText(notImplementedAnswer(T.BLAST_RADIUS_NEXT)),
+    async ({ repo, pr }) => {
+      try {
+        const repoRow = await resolveRepo(api, repo);
+        const pull = await resolvePr(api, repoRow, pr, 'get_blast_radius');
+        const data = await api.getBlast(pull.id);
+        return okText(blastAnswer(repoRow.full_name, pr, data));
+      } catch (err) {
+        return toToolError(err, opts.apiUrl);
+      }
+    },
   );
 }

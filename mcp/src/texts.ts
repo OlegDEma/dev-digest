@@ -34,8 +34,9 @@ export const TOOL_TEXTS = {
     description: 'Get the coding conventions and style rules extracted for a GitHub repo, used by code review (accepted ones by default).',
   },
   get_blast_radius: {
-    title: 'PR blast radius (not implemented)',
-    description: 'Not implemented yet. Will map which files and symbols a pull request (PR) affects.',
+    title: 'PR blast radius',
+    description:
+      'Map what a pull request (PR) can break: symbols declared in the changed files, their callers (file:line) and the HTTP endpoints and cron jobs behind them. Call before reviewing a PR. Read-only, from the code index.',
   },
 } as const;
 
@@ -66,8 +67,8 @@ export const runCancelled = (runId: string): string =>
 
 // ---- run_agent_on_pr errors -----------------------------------------------
 
-export const prNotFound = (pr: number, repo: string): string =>
-  `PR #${pr} not found in ${repo}. Check the number with gh pr list --repo ${repo}; if it is listed, open the PR in the DevDigest studio to sync it, then call run_agent_on_pr again.`;
+export const prNotFound = (pr: number, repo: string, tool = 'run_agent_on_pr'): string =>
+  `PR #${pr} not found in ${repo}. Check the number with gh pr list --repo ${repo}; if it is listed, open the PR in the DevDigest studio to sync it, then call ${tool} again.`;
 
 export const agentNotFound = (agent: string): string =>
   `Agent '${agent}' not found. Call list_agents to get a valid name or id.`;
@@ -85,8 +86,11 @@ export const runNotFound = (runId: string): string =>
 
 // ---- success-answer `next` strings ----------------------------------------
 
-export const BLAST_RADIUS_NEXT =
-  'get_blast_radius is not implemented yet. Use run_agent_on_pr or get_findings for review results.';
+export const BLAST_FLAG_OFF_NEXT =
+  'Repo intelligence is off (REPO_INTEL_ENABLED=false), so there is no map. Enable it, restart the DevDigest API, index the repo, then call get_blast_radius again.';
+
+export const blastIndexNext = (reason: string): string =>
+  `The code index is incomplete (${reason}); the map may miss callers. Resync the repo in the DevDigest studio, then call get_blast_radius again.`;
 
 export const AGENTS_EMPTY_NEXT =
   'No agents configured. Create one in the DevDigest studio (Agents page).';

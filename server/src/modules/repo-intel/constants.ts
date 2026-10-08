@@ -45,6 +45,9 @@ export const MAX_PARSE_MS_PER_FILE = 2000;
 /** Soft self-watch budget (< JobRunner hard 120s) → finish as `partial`. */
 export const INDEX_SOFT_BUDGET_MS = 110_000;
 
+/** Path fragments that identify test files (a subset of the junk-path list). */
+export const TEST_PATH_PATTERNS: readonly string[] = ['.test.', '.spec.', '__tests__/', '/test/', '/tests/'];
+
 // --- [T3] Graph / hotness / repo-map ---------------------------------------
 export const BFS_DEPTH = 2;
 export const HOTNESS_WINDOW_DAYS = 180;

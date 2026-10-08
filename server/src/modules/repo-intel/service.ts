@@ -48,6 +48,7 @@ import {
   INDEX_JOB_KIND,
   INDEXER_VERSION,
   MAX_CALLERS_PER_SYMBOL,
+  TEST_PATH_PATTERNS,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
   SUPPORTED_EXT,
@@ -217,7 +218,21 @@ export class RepoIntelService implements RepoIntel {
    * every caller gets `rank: 0` and HTTP impact is detected by re-reading the
    * clone (not the index). T2 promotes this path to the persistent layer.
    */
-  async getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult> {
+  async getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    opts?: { fallback?: boolean },
+  ): Promise<BlastResult> {
+    if (opts?.fallback === false) {
+      const none = { changedSymbols: [], callers: [], impactedEndpoints: [] };
+      if (!this.container.config.repoIntelEnabled) return { ...none, degraded: true, reason: 'flag_off' };
+      if (changedFiles.length === 0) return { ...none, degraded: false };
+      const persistent = await this.tryPersistentBlast(repoId, changedFiles);
+      if (persistent) return persistent;
+      const state = await this.getIndexState(repoId);
+      return { ...none, degraded: true, reason: state.degradedReason ?? 'no_data' };
+    }
+
     // T3: serve from the persistent index when it's built. Falls through to the
     // ripgrep best-effort below when the flag is off / index is absent.
     if (this.container.config.repoIntelEnabled && changedFiles.length > 0) {
@@ -310,7 +325,8 @@ export class RepoIntelService implements RepoIntel {
    *
    * Callers are PRECISE: only references whose `decl_file` resolved to a changed
    * file count. That favours precision over recall — an ambiguous
-   * (NULL decl_file) reference is not asserted as a caller.
+   * (NULL decl_file) reference is not asserted as a caller. Callers are at most
+   * MAX_CALLERS_PER_SYMBOL per symbol; same-file references are excluded in SQL.
    */
   private async tryPersistentBlast(
     repoId: string,
@@ -383,7 +399,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: capPerSymbol(callers, MAX_CALLERS_PER_SYMBOL),
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
@@ -720,13 +736,7 @@ const CRITICAL_PATH_ROOTS = 5;
  */
 /** The subset of JUNK_PATH_PATTERNS that identifies tests, lifted when a caller
  *  asks for them (conventions extraction). */
-const TEST_PATH_PATTERNS: ReadonlySet<string> = new Set([
-  '.test.',
-  '.spec.',
-  '__tests__/',
-  '/test/',
-  '/tests/',
-]);
+const TEST_PATH_SET: ReadonlySet<string> = new Set(TEST_PATH_PATTERNS);
 
 const JUNK_PATH_PATTERNS = [
   '.test.',
@@ -748,9 +758,19 @@ const JUNK_PATH_PATTERNS = [
 function isJunkPath(path: string, includeTests = false): boolean {
   const lower = path.toLowerCase();
   const patterns = includeTests
-    ? JUNK_PATH_PATTERNS.filter((p) => !TEST_PATH_PATTERNS.has(p))
+    ? JUNK_PATH_PATTERNS.filter((p) => !TEST_PATH_SET.has(p))
     : JUNK_PATH_PATTERNS;
   return patterns.some((p) => lower.includes(p));
+}
+
+/** Keeps the first `max` rows (already rank-desc) for each `viaSymbol`. */
+function capPerSymbol(rows: BlastCallerRow[], max: number): BlastCallerRow[] {
+  const seen = new Map<string, number>();
+  return rows.filter((r) => {
+    const n = (seen.get(r.viaSymbol) ?? 0) + 1;
+    seen.set(r.viaSymbol, n);
+    return n <= max;
+  });
 }
 
 /** Enclosing top-level (bare-name) symbol for a line, from persistent rows. */
