@@ -1,7 +1,9 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { RunSummary, RunTrace } from '@devdigest/shared';
+import type { ActiveRun, RunSummary, RunTrace } from '@devdigest/shared';
+
+type AgentRunRow = typeof t.agentRuns.$inferSelect;
 
 // ---- in-flight / history --------------------------------------------------
 
@@ -11,7 +13,7 @@ export async function activeRunsForPull(
   db: Db,
   workspaceId: string,
   prId: string,
-): Promise<{ run_id: string; agent_id: string | null; agent_name: string | null; ran_at: string | null }[]> {
+): Promise<ActiveRun[]> {
   const rows = await db
     .select({
       id: t.agentRuns.id,
@@ -48,7 +50,11 @@ export async function listRunsForPull(
     .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
     .where(and(eq(t.agentRuns.workspaceId, workspaceId), eq(t.agentRuns.prId, prId)))
     .orderBy(desc(t.agentRuns.ranAt));
-  return rows.map(({ run, agentName }) => ({
+  return rows.map(({ run, agentName }) => toRunSummary(run, agentName));
+}
+
+function toRunSummary(run: AgentRunRow, agentName: string | null): RunSummary {
+  return {
     run_id: run.id,
     agent_id: run.agentId,
     agent_name: agentName ?? null,
@@ -65,7 +71,22 @@ export async function listRunsForPull(
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
-  }));
+  };
+}
+
+/** One run (any status) + the PR it ran on, scoped to the workspace. */
+export async function getRunForWorkspace(
+  db: Db,
+  workspaceId: string,
+  runId: string,
+): Promise<(RunSummary & { pr_id: string | null }) | undefined> {
+  const [row] = await db
+    .select({ run: t.agentRuns, agentName: t.agents.name })
+    .from(t.agentRuns)
+    .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
+    .where(and(eq(t.agentRuns.id, runId), eq(t.agentRuns.workspaceId, workspaceId)));
+  if (!row) return undefined;
+  return { ...toRunSummary(row.run, row.agentName), pr_id: row.run.prId };
 }
 
 /**

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
 import { Intent, IntentSource, SmartDiff } from './brief.js';
+import { RunSummary } from './trace.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -76,3 +77,21 @@ export type PrIntentResponse = z.infer<typeof PrIntentResponse>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/** `GET /runs/:id` — one run's status + the PR it ran on + the review it produced
+ *  (null while running, or when the run failed/was cancelled before persisting). */
+export const RunDetail = RunSummary.extend({
+  pr_id: z.string().nullable(),
+  review: ReviewRecord.nullable(),
+});
+export type RunDetail = z.infer<typeof RunDetail>;
+
+/** `GET /pulls/:id/runs/active` — one in-flight run (status='running').
+ *  Mirrors the repository return type at server/src/modules/reviews/repository/run.repo.ts:14. */
+export const ActiveRun = z.object({
+  run_id: z.string(),
+  agent_id: z.string().nullable(),
+  agent_name: z.string().nullable(),
+  ran_at: z.string().nullable(),
+});
+export type ActiveRun = z.infer<typeof ActiveRun>;

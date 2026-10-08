@@ -34,6 +34,7 @@ Drizzle ORM + Postgres (pgvector) · Zod · Vitest · agent-browser (e2e)
 | Client          | `cd client && pnpm dev \| build \| typecheck \| test`      |
 | Engine          | `cd reviewer-core && npm test \| npm run typecheck`        |
 | E2E (hermetic)  | `cd e2e && npm run e2e:hermetic`                            |
+| MCP server      | `cd mcp && npm test \| npm run typecheck \| npm start`      |
 
 Flags for `dev.sh`: `--no-seed` · `--no-client` · `--db-only` · `--help`.
 
@@ -45,6 +46,7 @@ Flags for `dev.sh`: `--no-seed` · `--no-client` · `--db-only` · `--help`.
 | `client/`                   | Next.js studio, App Router                                |
 | `reviewer-core/`            | Pure engine: diff + repo map → prompt → LLM → findings    |
 | `e2e/`                      | Deterministic browser flows, no LLM                       |
+| `mcp/`                      | `devdigest` MCP server (stdio) over the running API       |
 | `server/src/vendor/shared/` | `@devdigest/shared` — Zod contracts for every package     |
 | `client/src/vendor/ui/`     | `@devdigest/ui` — vendored UI primitives                  |
 
@@ -57,13 +59,14 @@ for tools that still look for that name.
 Module-local commands, conventions and gotchas live in each package's own
 `AGENTS.md` (auto-loaded when you work in that folder), not here —
 [`server/`](server/AGENTS.md) · [`client/`](client/AGENTS.md) ·
-[`reviewer-core/`](reviewer-core/AGENTS.md) · [`e2e/`](e2e/AGENTS.md). Each points
+[`reviewer-core/`](reviewer-core/AGENTS.md) · [`e2e/`](e2e/AGENTS.md) ·
+[`mcp/`](mcp/AGENTS.md). Each points
 at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, never copy.
 
 ## Conventions (non-default — you cannot infer these from the code)
 
 - **Not a monorepo workspace.** Each package has its own `package.json` and its
-  own lockfile. `server/` + `client/` use **pnpm**; `reviewer-core/` + `e2e/` use
+  own lockfile. `server/` + `client/` use **pnpm**; `reviewer-core/` + `e2e/` + `mcp/` use
   **npm**. Never run the wrong package manager in a package.
 - Cross-package imports resolve through **tsconfig path aliases**, not published
   modules. `reviewer-core` is consumed as TypeScript **source** and never emits
@@ -80,10 +83,10 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   instead: `./node_modules/.bin/tsc --noEmit`, `./node_modules/.bin/vitest run`,
   `./node_modules/.bin/tsx src/db/migrate.ts`. Evidence: `server/INSIGHTS.md`
   → *Recurring Errors & Fixes*.
-- **CI is per-package (5 workflows); server tests run as two jobs.**
+- **CI is per-package (6 workflows); server tests run as two jobs.**
   `.github/workflows/`: `server-unit.yml` (hermetic) and `server-integration.yml`
   (`*.it.test.ts`, testcontainers Postgres, self-skips without Docker), plus
-  `client.yml`, `reviewer-core.yml`, `e2e-web.yml`. There is no root/aggregate
+  `client.yml`, `reviewer-core.yml`, `mcp.yml`, `e2e-web.yml`. There is no root/aggregate
   workflow. Evidence: `.github/workflows/`.
 
 ### Naming
