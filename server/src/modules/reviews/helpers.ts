@@ -2,7 +2,8 @@
  * Pure helpers for the review service (side-effect free; operate purely on
  * their arguments — no DB / network / `this`).
  */
-import type { Finding } from '@devdigest/shared';
+import { Verdict } from '@devdigest/shared';
+import type { Finding, ReviewRecord } from '@devdigest/shared';
 import type { FindingRow, PullRow, ReviewRow } from './repository.js';
 
 // reduceReviews + sliceDiff live in @devdigest/reviewer-core (pure engine logic
@@ -71,6 +72,21 @@ export function reviewToDto(
     created_at: review.createdAt.toISOString(),
     findings: findings.map(findingRowToDto),
   };
+}
+
+/** Narrow a persisted verdict (plain text column) to the contract enum; unknown → null. */
+export function toVerdict(v: string | null): Verdict | null {
+  const parsed = Verdict.safeParse(v);
+  return parsed.success ? parsed.data : null;
+}
+
+/** `reviewToDto` with `verdict` narrowed so it satisfies the `ReviewRecord` contract. */
+export function reviewToRecord(
+  review: ReviewRow,
+  findings: FindingRow[],
+  agentName?: string | null,
+): ReviewRecord {
+  return { ...reviewToDto(review, findings, agentName), verdict: toVerdict(review.verdict) };
 }
 
 /**

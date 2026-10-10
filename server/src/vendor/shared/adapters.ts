@@ -142,6 +142,23 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+export interface PrTouchingFile {
+  number: number;
+  title: string;
+  merged_at: string | null;
+  author: string;
+  path: string;
+}
+export interface HistoryLimits {
+  maxFiles: number;
+  perFileCommits: number;
+  maxCommits: number;
+  /** Overall budget for the whole fan-out; the call rejects once it is spent. */
+  deadlineMs: number;
+  /** How many PR lookups may run at once. */
+  concurrency: number;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -168,6 +185,13 @@ export interface GitHubClient {
   getFileContent(repo: RepoRef, path: string, ref: string): Promise<string>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /** PRs associated with recent commits that touched `files` (I/O only; filtering is the caller's). */
+  listPrsTouchingFiles(
+    repo: RepoRef,
+    files: string[],
+    excludeNumber: number,
+    limits: HistoryLimits,
+  ): Promise<PrTouchingFile[]>;
 }
 
 // ---------- Git (simple-git, heavy) ----------

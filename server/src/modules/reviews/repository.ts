@@ -1,6 +1,6 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { Finding, RunSummary, RunTrace } from '@devdigest/shared';
+import type { ActiveRun, Finding, RunSummary, RunTrace } from '@devdigest/shared';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -64,6 +64,22 @@ export class ReviewRepository {
     return reviewRepo.reviewsForPull(this.db, prId);
   }
 
+  /** Newest review produced by a run (workspace-scoped), with its findings. */
+  reviewForRun(
+    workspaceId: string,
+    runId: string,
+  ): Promise<{ review: ReviewRow; findings: FindingRow[] } | undefined> {
+    return reviewRepo.reviewForRun(this.db, workspaceId, runId);
+  }
+
+  /** One run (any status) + its PR id, workspace-scoped. */
+  getRunForWorkspace(
+    workspaceId: string,
+    runId: string,
+  ): Promise<(RunSummary & { pr_id: string | null }) | undefined> {
+    return runRepo.getRunForWorkspace(this.db, workspaceId, runId);
+  }
+
   getReview(reviewId: string): Promise<ReviewRow | undefined> {
     return reviewRepo.getReview(this.db, reviewId);
   }
@@ -73,7 +89,7 @@ export class ReviewRepository {
   activeRunsForPull(
     workspaceId: string,
     prId: string,
-  ): Promise<{ run_id: string; agent_id: string | null; agent_name: string | null; ran_at: string | null }[]> {
+  ): Promise<ActiveRun[]> {
     return runRepo.activeRunsForPull(this.db, workspaceId, prId);
   }
 

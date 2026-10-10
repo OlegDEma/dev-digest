@@ -76,6 +76,8 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
 - **2026-09-23** — A container with `role="button"` + its own Enter/Space `onKeyDown` **breaks every interactive control nested inside it**: the keydown bubbles up, the container's `preventDefault()` cancels the nested button's activation, and the container's own `onClick` runs instead. On `SkillRailCard` this made the Delete button and the whole ConfirmDialog keyboard-dead — Enter merely selected the card. **jsdom cannot catch this** (it never synthesizes click-from-Enter), so the RTL suite stayed green; it was found by dispatching a real `KeyboardEvent` in a browser and reading `ev.defaultPrevented`. Guard the handler with `if (e.target !== e.currentTarget) return;` and render overlays as a sibling of the card, not a descendant. An `onClick` stopPropagation wrapper does **not** help — it stops clicks, not keydowns. Evidence: `SkillRailCard.tsx` (the guard + the fragment), `SkillRailCard.test.tsx` → "does not swallow keyboard activation of its nested controls".
 - **2026-09-30** — promoted → `.claude/agents/test-writer.md` (jsdom-green does not prove browser-correct, ~`:147`).
 
+- **2026-10-09** — **Inline-style components get a responsive breakpoint from CSS grid, not media queries**: `OverviewTab/styles.ts` `twoCol` uses `gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 460px), 1fr))"`, so Intent and Blast sit side by side only when the page content (max 1080px) has room for two 460px columns and stack below that. Inline `style` objects cannot hold `@media`, and a `window.matchMedia` listener is not needed. Evidence: `src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/styles.ts`.
+
 ## Tool & Library Notes
 
 ## Recurring Errors & Fixes

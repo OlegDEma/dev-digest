@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 
 export const s = {
+  // SectionLabel carries its own bottom margin; the card's flex gap already spaces it.
+  title: { marginBottom: -14 } satisfies CSSProperties,
   card: {
     border: "1px solid var(--border)",
     borderRadius: 8,

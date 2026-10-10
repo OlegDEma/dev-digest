@@ -1,12 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, RunDetail, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
-import { reviewToDto } from './helpers.js';
+import { reviewToDto, reviewToRecord } from './helpers.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -171,6 +171,15 @@ export class ReviewService {
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
     );
+  }
+
+  /** One run + the review it produced (null while running / failed before persisting). */
+  async runDetail(workspaceId: string, runId: string): Promise<RunDetail> {
+    const run = await this.repo.getRunForWorkspace(workspaceId, runId);
+    if (!run) throw new NotFoundError('Run not found');
+    const found = await this.repo.reviewForRun(workspaceId, runId);
+    const review = found ? reviewToRecord(found.review, found.findings, run.agent_name) : null;
+    return { ...run, review };
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {

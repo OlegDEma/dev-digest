@@ -94,4 +94,17 @@ describe("IntentCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Derive intent" }));
     expect(state.mutate).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the title inside the card while loading and on error", () => {
+    for (const q of [
+      { data: undefined, isLoading: true, isError: false },
+      { data: undefined, isLoading: false, isError: true, error: new Error("boom") },
+    ]) {
+      state.query = q as never;
+      renderCard();
+      const title = screen.getByText("Intent");
+      expect(title.closest("section")!.firstElementChild).toContainElement(title);
+      cleanup();
+    }
+  });
 });

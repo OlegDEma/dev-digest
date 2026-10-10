@@ -13,7 +13,7 @@
  * raw-SQL probes below MUST swallow `undefined_table` (Postgres 42P01) so the
  * facade keeps returning degraded — never throws.
  */
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
@@ -499,19 +499,27 @@ export class RepoIntelRepository {
       .where(and(eq(t.symbols.repoId, repoId), inArray(t.symbols.path, paths)));
   }
 
-  /** Resolved cross-file callers of symbols declared in `declFiles`. */
+  /**
+   * Resolved cross-file callers of symbols declared in `declFiles`, after the same-file
+   * exclusion. At most `perSymbolFiles` distinct caller files per symbol (best rank first)
+   * are loaded, so a hot symbol never drags thousands of rows into memory.
+   */
   async getResolvedCallers(
     repoId: string,
     declFiles: string[],
     names: string[],
+    perSymbolFiles: number,
   ): Promise<ResolvedCallerRow[]> {
     if (declFiles.length === 0 || names.length === 0) return [];
-    return this.db
+    const ranked = this.db
       .select({
         fromPath: t.references.fromPath,
         toSymbol: t.references.toSymbol,
         line: t.references.line,
         rank: t.fileRank.rank,
+        fileOrdinal: sql<number>`dense_rank() over (partition by ${t.references.toSymbol} order by ${t.fileRank.rank} desc, ${t.references.fromPath} asc)`.as(
+          'file_ordinal',
+        ),
       })
       .from(t.references)
       .innerJoin(
@@ -525,9 +533,20 @@ export class RepoIntelRepository {
         and(
           eq(t.references.repoId, repoId),
           inArray(t.references.declFile, declFiles),
+          ne(t.references.fromPath, t.references.declFile),
           inArray(t.references.toSymbol, names),
         ),
-      );
+      )
+      .as('ranked_callers');
+    return this.db
+      .select({
+        fromPath: ranked.fromPath,
+        toSymbol: ranked.toSymbol,
+        line: ranked.line,
+        rank: ranked.rank,
+      })
+      .from(ranked)
+      .where(lte(ranked.fileOrdinal, perSymbolFiles));
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */

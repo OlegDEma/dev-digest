@@ -11,6 +11,8 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  PrTouchingFile,
+  HistoryLimits,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -386,5 +388,73 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listPrsTouchingFiles(
+    repo: RepoRef,
+    files: string[],
+    excludeNumber: number,
+    limits: HistoryLimits,
+  ): Promise<PrTouchingFile[]> {
+    const deadline = Date.now() + limits.deadlineMs;
+    // Every call shares ONE deadline and gets a single bounded retry.
+    const call = <T>(fn: () => Promise<T>): Promise<T> =>
+      withRetry(
+        () => {
+          const left = deadline - Date.now();
+          if (left <= 0) throw new Error('history deadline exceeded');
+          return withTimeout(fn(), Math.min(TIMEOUT, left));
+        },
+        { retries: 1, baseDelayMs: 250, maxDelayMs: 1000 },
+      );
+
+    const pathsBySha = new Map<string, string[]>();
+    for (const path of files.slice(0, limits.maxFiles)) {
+      const commits = await call(() =>
+        this.octokit.rest.repos.listCommits({
+          owner: repo.owner,
+          repo: repo.name,
+          path,
+          per_page: limits.perFileCommits,
+        }),
+      );
+      for (const c of commits.data) {
+        if (!pathsBySha.has(c.sha) && pathsBySha.size >= limits.maxCommits) continue;
+        pathsBySha.set(c.sha, [...(pathsBySha.get(c.sha) ?? []), path]);
+      }
+    }
+
+    const entries = [...pathsBySha];
+    const rows: PrTouchingFile[] = [];
+    const width = Math.max(1, limits.concurrency);
+    for (let i = 0; i < entries.length; i += width) {
+      const batch = await Promise.all(
+        entries.slice(i, i + width).map(async ([sha, paths]) => {
+          const prs = await call(() =>
+            this.octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: repo.owner,
+              repo: repo.name,
+              commit_sha: sha,
+            }),
+          );
+          return { paths, prs: prs.data };
+        }),
+      );
+      for (const { paths, prs } of batch) {
+        for (const pr of prs) {
+          if (pr.number === excludeNumber) continue;
+          for (const path of paths) {
+            rows.push({
+              number: pr.number,
+              title: pr.title,
+              merged_at: pr.merged_at ?? null,
+              author: pr.user?.login ?? '',
+              path,
+            });
+          }
+        }
+      }
+    }
+    return rows;
   }
 }

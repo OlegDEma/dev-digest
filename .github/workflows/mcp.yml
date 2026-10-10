@@ -1,0 +1,54 @@
+# mcp suite — the `devdigest` MCP server (stdio) over the DevDigest API.
+# Hermetic: FakeApi + in-memory MCP client, no network, no LLM. Uses npm (package-lock.json).
+#
+# server/src/vendor/shared/** is in the path filter because mcp aliases
+# @devdigest/shared to it at type-check time (types only).
+
+name: mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp/**'
+      - 'server/src/vendor/shared/**'
+      - '.github/workflows/mcp.yml'
+  pull_request:
+    paths:
+      - 'mcp/**'
+      - 'server/src/vendor/shared/**'
+      - '.github/workflows/mcp.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      - run: npm ci
+
+      # The shared contracts import `zod`, which resolves from server/node_modules locally.
+      # CI installs only mcp/, so point that lookup at mcp's own zod (no tsconfig alias — it
+      # breaks the SDK's registerTool types, see root INSIGHTS.md 2026-10-06).
+      - run: ln -s ../mcp/node_modules ../server/node_modules
+
+      - run: npm run typecheck
+
+      - run: npm test

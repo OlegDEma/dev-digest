@@ -1,1 +1,15 @@
-{}
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Before executing this git push command, invoke the pr-self-review skill. Run: git diff origin/main...HEAD and review the changes for bugs, leftover debug code and secrets before pushing."
+          }
+        ]
+      }
+    ]
+  }
+}

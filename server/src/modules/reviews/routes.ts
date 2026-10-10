@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { RunRequest } from '@devdigest/shared';
+import { ActiveRun, RunDetail, RunRequest } from '@devdigest/shared';
+import { z } from 'zod';
 import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -10,6 +11,8 @@ import { ReviewService } from './service.js';
 /**
  * reviews module.
  *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
+ *   GET    /runs/:id                                   → RunDetail (run + PR id + its review, workspace-scoped)
+ *   GET    /pulls/:id/runs/active                      → in-flight runs (ActiveRun[])
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
@@ -92,15 +95,25 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   });
 
   // ---- Active (in-flight) runs for a PR (server source of truth) ----------
-  app.get('/pulls/:id/runs/active', { schema: { params: IdParams } }, async (req) => {
-    const { workspaceId } = await getContext(container, req);
-    return service.activeRuns(workspaceId, req.params.id);
-  });
+  app.get(
+    '/pulls/:id/runs/active',
+    { schema: { params: IdParams, response: { 200: z.array(ActiveRun) } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.activeRuns(workspaceId, req.params.id);
+    },
+  );
 
   // ---- All runs for a PR (any status; the run history, incl. failures) -----
   app.get('/pulls/:id/runs', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);
     return service.listRuns(workspaceId, req.params.id);
+  });
+
+  // ---- One run + its review (workspace-scoped) -----------------------------
+  app.get('/runs/:id', { schema: { params: IdParams, response: { 200: RunDetail } } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.runDetail(workspaceId, req.params.id);
   });
 
   // ---- Delete one run from the history (+ its trace) ----------------------

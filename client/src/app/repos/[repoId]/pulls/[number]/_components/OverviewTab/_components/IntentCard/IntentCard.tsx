@@ -25,16 +25,24 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
   if (q.isLoading) {
     return (
       <section>
-        <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
-        <Skeleton height={72} />
+        <div style={s.card}>
+          <div style={s.title}>
+            <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
+          </div>
+          <Skeleton height={72} />
+        </div>
       </section>
     );
   }
   if (q.isError) {
     return (
       <section>
-        <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
-        <ErrorState body={(q.error as Error).message} onRetry={() => q.refetch()} />
+        <div style={s.card}>
+          <div style={s.title}>
+            <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
+          </div>
+          <ErrorState body={(q.error as Error).message} onRetry={() => q.refetch()} />
+        </div>
       </section>
     );
   }
@@ -45,8 +53,10 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
   if (!intent) {
     return (
       <section>
-        <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
         <div style={s.card}>
+          <div style={s.title}>
+            <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
+          </div>
           <span style={s.muted}>{t("intent.empty")}</span>
           <div>
             <Button kind="primary" size="sm" onClick={run} disabled={recompute.isPending} loading={recompute.isPending}>
@@ -60,8 +70,10 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
 
   return (
     <section>
-      <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
       <div style={s.card}>
+        <div style={s.title}>
+          <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
+        </div>
         <div style={s.headerRow}>
           <Badge color={confidenceColor(intent.confidence)}>{t(`intent.confidence.${intent.confidence}`)}</Badge>
           {stale && <Badge color="var(--warn)">{t("intent.stale")}</Badge>}
