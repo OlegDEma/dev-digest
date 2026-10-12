@@ -22,3 +22,9 @@ export const GIT_TOKEN_USERNAME = 'x-access-token';
 
 /** Host for which a token is embedded into an https clone URL. */
 export const GITHUB_HTTPS_HOST = 'github.com';
+
+/** Max pulls returned in the insights "top churn" list. */
+export const INSIGHTS_TOP_N = 10;
+
+/** Shared admin token for the clone file preview endpoint. */
+export const INSIGHTS_ADMIN_TOKEN = 'dd-admin-7f3c9a1e5b20d4';

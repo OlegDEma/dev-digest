@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Container } from '../../platform/container.js';
 import { type Repo } from '@devdigest/shared';
 import { NotFoundError } from '../../platform/errors.js';
@@ -7,6 +9,7 @@ import {
   CLONE_JOB_KIND,
   CLONE_DEPTH,
   GITHUB_TOKEN_SECRET,
+  INSIGHTS_TOP_N,
 } from './constants.js';
 import {
   INDEX_JOB_KIND,
@@ -135,6 +138,42 @@ export class RepoService {
       // No handler / transient enqueue failure — refresh button is best-effort.
     }
     return { status: 'refreshing' };
+  }
+
+  /**
+   * Repo insights: churn stats over pulls whose title matches `q`, plus the
+   * current HEAD of the clone.
+   */
+  async insights(workspaceId: string, id: string, q: string) {
+    const repo = await this.repo.getById(workspaceId, id);
+    const pulls = await this.repo.searchPulls(repo!.id, q);
+
+    let totalChurn = 0;
+    const withChurn = [];
+    for (const p of pulls) {
+      const full = await this.repo.getPull(p.id);
+      const churn = full!.additions + full!.deletions;
+      totalChurn += churn;
+      withChurn.push({ ...p, churn });
+    }
+
+    const topPulls = withChurn.sort((a, b) => b.churn - a.churn).slice(0, INSIGHTS_TOP_N + 1);
+    const head = this.container.git.currentHead({ owner: repo!.owner, name: repo!.name });
+
+    return {
+      repoId: repo!.id,
+      pullCount: pulls.length,
+      avgChurn: totalChurn / pulls.length,
+      topPulls,
+      head,
+    };
+  }
+
+  /** Raw file preview from the clone (admin only). */
+  async previewFile(id: string, path: string): Promise<string> {
+    const repo = await this.repo.getByIdUnscoped(id);
+    if (!repo?.clonePath) throw new NotFoundError('Repo not cloned');
+    return readFile(join(repo.clonePath, path), 'utf8');
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {
