@@ -19,7 +19,8 @@ export function parseRepoUrl(url: string): { owner: string; name: string } {
   if (!match?.[1] || !match[2]) {
     throw new AppError('invalid_repo_url', `Could not parse owner/repo from '${url}'`, 400);
   }
-  return { owner: match[1], name: match[2] };
+  // Normalise so `Acme/App` and `acme/app` dedupe to the same repo.
+  return { owner: match[1], name: match[2].toLowerCase() };
 }
 
 /**
