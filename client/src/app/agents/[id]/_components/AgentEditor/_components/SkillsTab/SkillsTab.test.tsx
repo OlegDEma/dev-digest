@@ -35,6 +35,7 @@ const AGENT: Agent = {
   strategy: "single-pass",
   ci_fail_on: "critical",
   repo_intel: true,
+  context_docs: [],
   enabled: true,
   version: 1,
 };
@@ -49,6 +50,7 @@ const skill = (id: string, name: string, extra: Partial<SkillSummary> = {}): Ski
   enabled: true,
   version: 1,
   evidence_files: null,
+  context_docs: [],
   used_by: 0,
   pull_pct: null,
   accept_pct: null,

@@ -39,5 +39,57 @@
       "unresolved": "unresolved",
       "skipped": "skipped"
     }
+  },
+  "prBrief": {
+    "title": "PR Brief",
+    "generate": "Generate brief",
+    "refresh": "Refresh",
+    "stale": "PR updated since brief was generated",
+    "loadFailed": "Could not load the brief",
+    "generateFailed": "Could not generate the brief",
+    "retry": "Retry",
+    "generatedWithout": "Generated without:",
+    "missingInput": {
+      "intent": "intent",
+      "blast": "blast radius",
+      "diff_stats": "diff stats",
+      "hunk_ranges": "changed line ranges",
+      "pr_body": "PR description",
+      "linked_issue": "linked issue",
+      "specs": "spec documents",
+      "smart_diff": "Smart Diff roles"
+    },
+    "specSkipped": "{path} ({reason})",
+    "specReason": {
+      "not_found": "not found",
+      "too_large": "too large",
+      "unreadable": "unreadable",
+      "outside_repo": "outside repo",
+      "no_clone": "no clone",
+      "over_budget": "over budget"
+    },
+    "footer": "{model} · {inTokens}/{budget} tokens in · {outTokens} out · {cost} · {attempts, plural, one {# attempt} other {# attempts}} · {sha} · {time}",
+    "costUnknown": "cost unknown",
+    "dropped": "{count, plural, one {# item dropped} other {# items dropped}}: file not in this PR or its blast map",
+    "corrected": "{count, plural, one {# line adjusted} other {# lines adjusted}}",
+    "riskAreas": "Risk areas",
+    "severity": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "expandRisk": "Show details",
+    "collapseRisk": "Hide details",
+    "reviewFocus": {
+      "title": "Review focus — read these first",
+      "count": "{count, plural, one {# item} other {# items}}",
+      "empty": "No review focus items.",
+      "lineAdjusted": "line adjusted",
+      "outsideDiff": "outside diff"
+    },
+    "openLineAria": "Open {path} line {line} in Files changed",
+    "openFileAria": "Open {path} in Files changed",
+    "notInDiff": "File not in this PR’s diff",
+    "lineOutside": "Line {n} is outside the changed lines."
   }
 }

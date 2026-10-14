@@ -17,7 +17,7 @@ import { and, asc, desc, eq, inArray, isNotNull, lte, ne, sql } from 'drizzle-or
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
-import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
+import type { DegradedReason, FileRankRow, IndexState, IndexStatus, OnboardingIndexStats } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
 const INSERT_CHUNK_SIZE = 500;
@@ -236,6 +236,83 @@ export class RepoIntelRepository {
       // facade always has a safe synthesised fallback.
       return null;
     }
+  }
+
+  /**
+   * Onboarding: the index row as the tour needs it. Walk stats are numeric-guarded
+   * (absent after an incremental refresh). Tolerant like `tryGetIndexState`:
+   * null when the row or the table is missing.
+   */
+  async getOnboardingIndexStats(
+    repoId: string,
+  ): Promise<Omit<OnboardingIndexStats, 'enabled'> | null> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(t.repoIndexState)
+        .where(eq(t.repoIndexState.repoId, repoId));
+      return row ? projectOnboardingStats(row) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Onboarding snapshot rows, read inside ONE read-only REPEATABLE READ
+   * transaction so an index refresh landing mid-read cannot mix two states.
+   */
+  async getOnboardingSnapshotRows(repoId: string): Promise<{
+    stats: Omit<OnboardingIndexStats, 'enabled'>;
+    ranks: Array<{ path: string; pagerank: number; hotness: number; rank: number; percentile: number }>;
+    importers: Map<string, number>;
+    edgeCount: number;
+    endpoints: Map<string, string[]>;
+  } | null> {
+    return this.db.transaction(
+      async (tx) => {
+        const [state] = await tx
+          .select()
+          .from(t.repoIndexState)
+          .where(eq(t.repoIndexState.repoId, repoId));
+        if (!state) return null;
+        const ranks = await tx
+          .select({
+            path: t.fileRank.filePath,
+            pagerank: t.fileRank.pagerank,
+            hotness: t.fileRank.hotness,
+            rank: t.fileRank.rank,
+            percentile: t.fileRank.percentile,
+          })
+          .from(t.fileRank)
+          .where(eq(t.fileRank.repoId, repoId));
+        const inDegree = await tx
+          .select({
+            toFile: t.fileEdges.toFile,
+            n: sql<number>`count(distinct ${t.fileEdges.fromFile})::int`,
+          })
+          .from(t.fileEdges)
+          .where(eq(t.fileEdges.repoId, repoId))
+          .groupBy(t.fileEdges.toFile);
+        const [edgeTotal] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(t.fileEdges)
+          .where(eq(t.fileEdges.repoId, repoId));
+        const facts = await tx
+          .select({ filePath: t.fileFacts.filePath, endpoints: t.fileFacts.endpoints })
+          .from(t.fileFacts)
+          .where(eq(t.fileFacts.repoId, repoId));
+        return {
+          stats: projectOnboardingStats(state),
+          ranks,
+          importers: new Map(inDegree.map((r) => [r.toFile, r.n])),
+          edgeCount: edgeTotal?.n ?? 0,
+          endpoints: new Map(
+            facts.map((f) => [f.filePath, Array.isArray(f.endpoints) ? (f.endpoints as string[]) : []]),
+          ),
+        };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -634,4 +711,23 @@ export class RepoIntelRepository {
       await this.db.insert(t.fileFacts).values(values.slice(i, i + INSERT_CHUNK_SIZE));
     }
   }
+}
+
+function numOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function projectOnboardingStats(
+  row: typeof t.repoIndexState.$inferSelect,
+): Omit<OnboardingIndexStats, 'enabled'> {
+  const stats = (row.stats ?? {}) as Record<string, unknown>;
+  return {
+    status: row.status as IndexStatus,
+    filesIndexed: row.filesIndexed,
+    filesSkipped: row.filesSkipped,
+    lastIndexedSha: row.lastIndexedSha || null,
+    totalCandidates: numOrNull(stats.totalCandidates),
+    bounded: numOrNull(stats.bounded),
+    hotnessAvailable: stats.hotnessAvailable === true,
+  };
 }

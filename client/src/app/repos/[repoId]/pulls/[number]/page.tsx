@@ -21,6 +21,7 @@ import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } 
 import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context";
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
+import { buildPrHref, parseLineParam } from "./helpers";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {
@@ -69,6 +70,21 @@ export default function PRDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+
+  // Deep link into Files changed (?tab=diff&file=&line=) from the PR brief. A fresh
+  // nonce per (file, line) re-fires the scroll when the same target is opened twice.
+  const fileParam = search.get("file");
+  const lineParam = search.get("line");
+  const nonceRef = React.useRef(0);
+  const diffTarget = React.useMemo(
+    () =>
+      fileParam
+        ? { path: fileParam, line: parseLineParam(lineParam), nonce: ++nonceRef.current }
+        : undefined,
+    [fileParam, lineParam],
+  );
+  const clearDiffTarget = () =>
+    router.replace(buildPrHref(repoId, number, search, { file: null, line: null }), { scroll: false });
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -137,7 +153,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && prId && <OverviewTab prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} prBody={pr.body} pollWhileRunning={liveRunIds.length > 0} />}
+        {tab === "overview" && prId && <OverviewTab prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} prBody={pr.body} pollWhileRunning={liveRunIds.length > 0} changedPaths={pr.files.map((f) => f.path)} onOpenFile={(path, line) => router.replace(buildPrHref(repoId, number, search, { tab: "diff", file: path, line }))} />}
 
         {tab === "findings" && (
           <FindingsTab
@@ -181,6 +197,8 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            target={diffTarget}
+            onTargetHandled={clearDiffTarget}
           />
         )}
       </div>

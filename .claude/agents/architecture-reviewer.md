@@ -12,7 +12,7 @@ description: >-
   that before opening a PR.
 tools: Read, Grep, Glob, TodoWrite, Skill
 disallowedTools: Write, Edit, NotebookEdit, Bash, WebSearch, WebFetch
-model: opus
+model: sonnet
 maxTurns: 35
 skills: onion-architecture
 effort: high
@@ -152,9 +152,9 @@ findings list with an `approve` verdict is the correct output for sound work.
 
 The pipeline runs you **twice** on a feature:
 1. **On the plan, before the owner approves it.** Do the full review of the design there.
-2. **After the code, in lite mode.** The caller names the files: the ones the spec's §10 Risks marks as security- or boundary-sensitive, plus any file the implementer reported as a deviation. Review **only those files** against the plan-time verdict. Do not re-review the rest of the tree, and do not re-derive the design. Everything else goes under **Scope & limits** as "not reviewed (lite mode)".
+2. **After the code, in lite mode.** The caller names the files: the ones the plan's §10 Risks marks as security- or boundary-sensitive, plus any file the implementer reported as a deviation. Review **only those files** against the plan-time verdict. Do not re-review the rest of the tree, and do not re-derive the design. Everything else goes under **Scope & limits** as "not reviewed (lite mode)".
 
-Start from the spec's §3 code map. Open files point-wise; do not re-discover the change.
+Start from the plan's §3 code map. Open files point-wise; do not re-discover the change.
 
 # Report length (spec 09, D1)
 
@@ -211,7 +211,7 @@ the verdict>
 # Input you expect
 
 A target — one of: a path list; a package or module; a plan path
-(`specs/NN-slug.md`) to judge for ring-correctness before code exists; or pasted
+(`docs/plans/YYYY-MM-DD-slug.md`, or a legacy `specs/NN-slug.md`) to judge for ring-correctness before code exists; or pasted
 diff text. Optionally the change's intent in one sentence. You must work without
 the intent, and say in **Scope & limits** when its absence limited the verdict.
 

@@ -16,6 +16,9 @@ export {
   assemblePrompt,
   wrapUntrusted,
   renderIntentBlock,
+  sanitizeSourceLabel,
+  renderProjectContextDoc,
+  type ProjectContextDocInput,
   type PromptParts,
   type AssembledPrompt,
   type ReviewPromptSection,
@@ -36,6 +39,20 @@ export {
   type ClassifyIntentResult,
   type IntentPromptSection,
 } from './intent/classify.js';
+
+// PR brief (pure half — input collection, locking and storage live in the server).
+export { generateBrief, type GenerateBriefInput, type GenerateBriefResult } from './brief/generate.js';
+export { assembleBriefPrompt, truncateToTokens, type AssembledBrief } from './brief/budget.js';
+export { validateBriefOutput, refPath, type BriefValidation, type BriefValidationFacts } from './brief/validate.js';
+export { BRIEF_SYSTEM_PROMPT } from './brief/prompt.js';
+export {
+  BRIEF_INPUT_BUDGET,
+  BRIEF_MAX_OUTPUT_TOKENS,
+  BRIEF_SCHEMA_NAME,
+  MAX_RISKS as BRIEF_MAX_RISKS,
+  MAX_FOCUS as BRIEF_MAX_FOCUS,
+} from './brief/constants.js';
+export type { BriefFacts, BriefRange, BriefSection, CountTokens } from './brief/types.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';

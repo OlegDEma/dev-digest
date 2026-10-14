@@ -10,7 +10,14 @@ import { notify } from "../../../../../../../../../lib/toast";
 import { confidenceColor, formatCost } from "./helpers";
 import { s } from "./styles";
 
-export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhileRunning: boolean }) {
+interface IntentCardProps {
+  prId: string;
+  pollWhileRunning: boolean;
+  /** When set (a brief exists), replaces the intent's own risk-area chips. */
+  riskAreas?: React.ReactNode;
+}
+
+export function IntentCard({ prId, pollWhileRunning, riskAreas }: IntentCardProps) {
   const t = useTranslations("brief");
   const q = usePrIntent(prId, { pollWhileRunning });
   const recompute = useRecomputeIntent(prId);
@@ -58,6 +65,7 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
             <SectionLabel icon="Sparkles">{t("block.intent")}</SectionLabel>
           </div>
           <span style={s.muted}>{t("intent.empty")}</span>
+          {riskAreas}
           <div>
             <Button kind="primary" size="sm" onClick={run} disabled={recompute.isPending} loading={recompute.isPending}>
               {t("intent.derive")}
@@ -106,7 +114,8 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
 
         <div style={s.divider} />
 
-        {intent.risk_areas.length > 0 && (
+        {riskAreas ??
+          (intent.risk_areas.length > 0 && (
           <div>
             <div style={s.colTitle("var(--text-muted)")}>{t("intent.riskAreas")}</div>
             <div style={s.chips}>
@@ -117,7 +126,7 @@ export function IntentCard({ prId, pollWhileRunning }: { prId: string; pollWhile
               ))}
             </div>
           </div>
-        )}
+          ))}
 
         {intent.missing_context.length > 0 && (
           <div>

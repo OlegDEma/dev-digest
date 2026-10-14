@@ -115,6 +115,16 @@ export class SkillsRepository {
     return row;
   }
 
+  /** Replace the ordered attach list; no version bump or snapshot (AC-17). */
+  async setContextDocs(workspaceId: string, id: string, docs: string[]): Promise<SkillRow | undefined> {
+    const [row] = await this.db
+      .update(t.skills)
+      .set({ contextDocs: docs })
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+      .returning();
+    return row;
+  }
+
   /** Delete a skill (scoped). agent_skills + skill_versions cascade. */
   async deleteById(workspaceId: string, id: string): Promise<boolean> {
     const rows = await this.db

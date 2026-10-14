@@ -1,24 +1,80 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
-  "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
   "kb": "{kb}kb",
-  "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+  "tokens": "≈ {count} tokens",
+  "usedBy": "{count, plural, one {Used by # agent} other {Used by # agents}}",
+  "docStatus": {
+    "too_large": "Too large (over 512 KB)",
+    "unreadable": "Not readable (not valid UTF-8)"
+  },
+  "page": {
+    "crumbWorkspace": "Workspace",
+    "subtitle": "Markdown specs, docs and insights from the repository clone. Attach them to an agent or a skill on its Context tab.",
+    "noRepo": "Select a repository to browse its project documents.",
+    "refresh": "Refresh",
+    "loadError": "Couldn’t load the project documents",
+    "truncated": "Showing {shown} of {total} documents",
+    "selectDoc": "Select a document to preview it.",
+    "docCount": "{count, plural, one {# document} other {# documents}}",
+    "empty": {
+      "title": "No project documents yet",
+      "body": "Add Markdown files under a specs, docs or insights folder of the repository. Every agent or skill you attach them to reads them as untrusted grounding context."
+    },
+    "cloneUnavailable": {
+      "title": "Clone not available",
+      "body": "This repository has no local clone yet, so its documents can’t be listed."
+    }
   },
   "mode": {
-    "preview": "preview",
-    "edit": "edit"
+    "preview": "Preview",
+    "edit": "Edit"
   },
   "editor": {
-    "loadError": "Couldn’t load spec",
+    "loadError": "Couldn’t load the document",
     "save": "Save",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "label": "Edit {path}",
+    "trackedWarning": "This file is tracked by git. The Resync action resets the clone to {target} and discards uncommitted edits, including this one.",
+    "saveError": "Couldn’t save: {message}",
+    "saved": "Saved",
+    "unsaved": "Unsaved changes",
+    "confirmTitle": "Discard unsaved changes?",
+    "confirmBody": "Your edits to this document haven’t been saved. Leaving now discards them.",
+    "discard": "Discard changes",
+    "keepEditing": "Keep editing"
+  },
+  "preview": {
+    "attached": "Attached",
+    "close": "Close",
+    "loadError": "Couldn’t load the document",
+    "path": "Path"
+  },
+  "tab": {
+    "headingAgent": "Project context",
+    "headingSkill": "Project context to use",
+    "countAgent": "{attached} of {total} attached",
+    "countSkill": "{attached} attached",
+    "orderNote": "Order matters — earlier docs appear earlier in the assembled ## Project context block. Toggle to attach.",
+    "inheritNote": "Any agent using this skill inherits these documents.",
+    "untrustedNote": "Injected as an untrusted block (## Project context) into every run.",
+    "tokensTotal": "≈ {count} tokens",
+    "filter": "Filter documents…",
+    "noRepo": "Select a repository to attach its project documents.",
+    "noDocs": "No project documents found in this repository.",
+    "noMatches": "No documents match “{q}”.",
+    "cloneUnavailable": "Clone not available — this repository has no local clone yet.",
+    "loadError": "Couldn’t load the project documents",
+    "preview": "Preview",
+    "previewDoc": "Preview {path}",
+    "attachDoc": "Attach {path}",
+    "dragHandle": "Drag to reorder {path}",
+    "moveUp": "Move {path} up",
+    "moveDown": "Move {path} down",
+    "notInRepo": "not in this repository",
+    "remove": "Remove",
+    "removeDoc": "Remove {path} from the attached list",
+    "saveFailed": "The change was not saved: {message}",
+    "serializesAs": "SERIALIZES AS",
+    "truncatedNote": "Showing {shown} of {total} documents"
   }
 }

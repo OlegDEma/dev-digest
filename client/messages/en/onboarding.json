@@ -1,17 +1,124 @@
 {
   "title": "Onboarding Tour",
-  "sections": "Sections",
-  "sectionCount": "{count} sections",
-  "regenerate": "Regenerate",
-  "regenerating": "Regenerating…",
-  "unknownError": "Unknown error",
-  "generate": {
+  "page": {
+    "crumbWorkspace": "Workspace",
+    "noRepo": "Select a repository to see its onboarding tour."
+  },
+  "empty": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
-    "cta": "Generate onboarding tour",
+    "body": "DevDigest writes a five-section tour of this repository: Architecture overview, Critical paths, How to run locally, Guided reading path, First tasks.",
+    "cta": "Generate onboarding tour"
+  },
+  "generate": {
     "generating": "Generating…"
   },
+  "regenerate": "Regenerate",
+  "regenerating": "Regenerating…",
+  "share": "Share link",
+  "linkCopied": "Link copied",
+  "header": {
+    "title": "Onboarding for <name>{repo}</name>",
+    "subtitleWithTotal": "Generated from index of {indexed, number} of {total, number} source files (JS/TS) · last refreshed {time}",
+    "subtitleWithoutTotal": "Generated from index of {indexed, number} source files (JS/TS) · last refreshed {time}",
+    "stale": "The index has changed since this tour was generated",
+    "partial": "Partial"
+  },
+  "stats": {
+    "calls": "{count, plural, one {# LLM call} other {# LLM calls}}",
+    "callsWithAttempts": "{count, plural, one {# LLM call} other {# LLM calls}} ({attempts} attempts)",
+    "tokens": "{count, number} tokens",
+    "cost": "${cost}",
+    "costUnknown": "cost unknown"
+  },
+  "partialReasons": {
+    "index_partial": "the index is partial",
+    "index_capped": "{indexed, number} of {total, number} source files were indexed (cap reached)",
+    "files_skipped": "{count, plural, one {# file was skipped} other {# files were skipped}} (too large or unparseable)",
+    "facts_truncated": "facts were trimmed to fit 8,000 tokens"
+  },
+  "skeleton": {
+    "providerFallback": "the selected provider",
+    "banner": "Showing the index skeleton — {sentence} {nextStep}",
+    "failure": "Regeneration failed — {sentence} {nextStep} Showing the tour from {time}.",
+    "reasons": {
+      "no_clone": {
+        "sentence": "Clone not available.",
+        "nextStep": "Regenerate once the repository is cloned."
+      },
+      "index_unavailable": {
+        "sentence": "The code index is not available (status: {status}).",
+        "nextStep": "Resync the index, then regenerate."
+      },
+      "no_import_graph": {
+        "sentence": "No JS/TS import graph — the indexer reads only .ts, .tsx, .js, .jsx, .mjs and .cjs files.",
+        "nextStep": "The AI narrative needs a JS/TS repository."
+      },
+      "llm_not_configured": {
+        "sentence": "No API key for {provider}.",
+        "nextStep": "Add one in Settings → API Keys, then regenerate."
+      },
+      "llm_failed": {
+        "sentence": "The AI call failed.",
+        "nextStep": "Regenerate to try again."
+      },
+      "llm_invalid_output": {
+        "sentence": "The AI reply did not match the expected format after {attempts} attempts.",
+        "nextStep": "Regenerate to try again."
+      },
+      "llm_timeout": {
+        "sentence": "The AI call took longer than 120 s.",
+        "nextStep": "Regenerate to try again."
+      }
+    }
+  },
+  "droppedItems": "{count, plural, one {# AI item was dropped because it cited a file not in the index} other {# AI items were dropped because they cited files not in the index}}",
+  "conflict": "A generation is already running for this repository",
+  "generateError": "Couldn’t generate the onboarding tour",
   "loadError": {
     "title": "Couldn’t load the onboarding tour"
+  },
+  "toc": {
+    "label": "On this page"
+  },
+  "sections": {
+    "architecture_overview": "Architecture overview",
+    "critical_paths": "Critical paths",
+    "run_locally": "How to run locally",
+    "reading_path": "Guided reading path",
+    "first_tasks": "First tasks"
+  },
+  "provenance": {
+    "ai_written": "AI-written",
+    "from_index": "from index"
+  },
+  "unavailable": {
+    "firstTasksSkeleton": "First tasks are written by the AI narrative — unavailable in the skeleton.",
+    "firstTasksTooFew": "Fewer than 3 AI-written first tasks cited files in the index — unavailable for this tour.",
+    "indexUnavailable": "Unavailable — the code index is not available.",
+    "noClone": "Unavailable — the repository has no clone.",
+    "generic": "Unavailable for this tour."
+  },
+  "files": {
+    "open": "Open",
+    "openLabel": "Open {path} on GitHub",
+    "top": "top {percent}%",
+    "none": "No ranked files",
+    "rankedByImportGraph": "Ranked by import graph"
+  },
+  "run": {
+    "copy": "Copy",
+    "copyLabel": "Copy command {command}",
+    "copied": "Copied",
+    "noManifest": "No package.json found at the repository root or one level below — run commands unavailable.",
+    "skippedFiles": "Skipped files",
+    "skipReasons": {
+      "too_large": "too large",
+      "invalid_json": "invalid JSON",
+      "unreadable": "unreadable",
+      "outside_repo": "outside the repository"
+    }
+  },
+  "architecture": {
+    "diagramInvalid": "Diagram could not be rendered"
   }
 }

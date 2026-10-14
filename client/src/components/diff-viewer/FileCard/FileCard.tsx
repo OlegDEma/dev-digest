@@ -6,7 +6,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
 import type { PrFile } from "@/lib/types";
-import { AUTO_EXPAND_MAX_LINES } from "../constants";
+import { AUTO_EXPAND_MAX_LINES, FOCUS_FLASH_MS, FOCUS_SETTLE_MS } from "../constants";
 import { parsePatch, type Line } from "../helpers";
 import {
   buildThreads,
@@ -30,12 +30,72 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+/** A deep-link request for this card (`nonce` makes a repeat of the same target fire again). */
+export interface FileCardFocus {
+  line: number | null;
+  nonce: number;
+}
+
+export function FileCard({
+  file,
+  commenting,
+  focus,
+  onFocusHandled,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  focus?: FileCardFocus;
+  onFocusHandled?: () => void;
+}) {
   const t = useTranslations("shell");
+  const tb = useTranslations("brief");
   const [open, setOpen] = React.useState(
     (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+
+  const headerRef = React.useRef<HTMLDivElement | null>(null);
+  const bodyRef = React.useRef<HTMLDivElement | null>(null);
+  const flashTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledRef = React.useRef(onFocusHandled);
+  handledRef.current = onFocusHandled;
+  // Line the deep link asked for but this diff does not render (AC-54).
+  const [outsideLine, setOutsideLine] = React.useState<number | null>(null);
+
+  React.useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  const focusNonce = focus?.nonce;
+  const focusLine = focus?.line ?? null;
+  React.useEffect(() => {
+    if (focusNonce === undefined) return;
+    setOpen(true);
+    setOutsideLine(null);
+    // `open` just flipped — wait for the lines to mount before looking one up.
+    const timer = setTimeout(() => {
+      const el =
+        focusLine == null
+          ? null
+          : Array.from(bodyRef.current?.querySelectorAll<HTMLElement>("[data-new-line]") ?? []).find(
+              (n) => n.getAttribute("data-new-line") === String(focusLine),
+            ) ?? null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "box-shadow .2s ease";
+        el.style.boxShadow = "inset 0 0 0 2px var(--accent)";
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => {
+          el.style.boxShadow = "";
+        }, FOCUS_FLASH_MS);
+      } else {
+        headerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (focusLine != null) setOutsideLine(focusLine);
+      }
+      handledRef.current?.();
+    }, FOCUS_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [focusNonce, focusLine]);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -54,7 +114,7 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
 
   return (
     <div style={s.fileCard}>
-      <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
+      <div ref={headerRef} onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
         <span className="mono" style={s.filePath}>
@@ -74,7 +134,12 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
         )}
       </div>
       {open && (
-        <div style={s.fileBody}>
+        <div ref={bodyRef} style={s.fileBody}>
+          {outsideLine != null && (
+            <div role="status" style={s.noDiff}>
+              {tb("prBrief.lineOutside", { n: outsideLine })}
+            </div>
+          )}
           {lines.length === 0 ? (
             <div style={s.noDiff}>{t("diffViewer.noDiffText")}</div>
           ) : (

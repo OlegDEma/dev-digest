@@ -17,6 +17,7 @@ const SKILL: Skill = {
   enabled: true,
   version: 1,
   evidence_files: null,
+  context_docs: [],
 };
 
 describe("PreviewTab", () => {

@@ -7,8 +7,9 @@ import { useTranslations } from "next-intl";
 import { type ShellContext } from "@devdigest/ui";
 import { useTheme } from "../../../lib/theme";
 import { useActiveRepo } from "../../../lib/repo-context";
+import { guardedNavigate } from "../../../lib/nav-guard";
 import { usePulls, useDeleteRepo } from "../../../lib/hooks";
-import { activeKeyFor, toShellRepo } from "../helpers";
+import { activeKeyFor, repoSwitchTarget, toShellRepo } from "../helpers";
 
 interface ShellContextOptions {
   onOpenCommandPalette: () => void;
@@ -30,13 +31,15 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
 
   const onSelectRepo = React.useCallback(
     (id: string) => {
-      setRepoId(id);
-      router.push(`/repos/${id}/pulls`);
+      guardedNavigate(() => {
+        setRepoId(id);
+        router.push(repoSwitchTarget(pathname, id));
+      });
     },
-    [setRepoId, router],
+    [setRepoId, router, pathname],
   );
 
-  const onAddRepo = React.useCallback(() => router.push("/onboarding"), [router]);
+  const onAddRepo = React.useCallback(() => guardedNavigate(() => router.push("/onboarding")), [router]);
 
   const onRemoveRepo = React.useCallback(
     (id: string) => {

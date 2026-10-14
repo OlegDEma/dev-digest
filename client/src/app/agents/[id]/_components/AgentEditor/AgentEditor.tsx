@@ -7,6 +7,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Tabs } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
+import { ContextDocsTab } from "../../../../../components/project-context/ContextDocsTab";
 import { ConfigTab } from "./_components/ConfigTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { TABS } from "./constants";
@@ -23,7 +24,13 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
       <div style={s.body}>
         {/* key={agent.id} remounts ConfigTab on agent switch so its form state
             re-initializes from props — no manual reset effect needed. */}
-        {tab === "skills" ? <SkillsTab key={agent.id} agent={agent} /> : <ConfigTab key={agent.id} agent={agent} />}
+        {tab === "skills" ? (
+          <SkillsTab key={agent.id} agent={agent} />
+        ) : tab === "context" ? (
+          <ContextDocsTab key={agent.id} variant="agent" owner={agent} />
+        ) : (
+          <ConfigTab key={agent.id} agent={agent} />
+        )}
       </div>
     </div>
   );

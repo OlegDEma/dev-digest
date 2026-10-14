@@ -36,6 +36,8 @@ import type {
   FileRankRow,
   IndexResult,
   IndexState,
+  OnboardingIndexStats,
+  OnboardingSnapshot,
   RefRow,
   RepoIntel,
   RepoMapResult,
@@ -435,6 +437,56 @@ export class RepoIntelService implements RepoIntel {
     const hit = await this.repo.getRepoMapCache(repoId, state.lastIndexedSha, budget);
     if (!hit) return degraded;
     return { text: hit.mapText, tokens: hit.tokenCount, cached: true };
+  }
+
+  /** Onboarding: index state for `current_index`; disabled / missing row → `degraded`. */
+  async getOnboardingIndexStats(repoId: string): Promise<OnboardingIndexStats> {
+    const unavailable: OnboardingIndexStats = {
+      enabled: false,
+      status: 'degraded',
+      filesIndexed: 0,
+      filesSkipped: 0,
+      lastIndexedSha: null,
+      totalCandidates: null,
+      bounded: null,
+      hotnessAvailable: false,
+    };
+    if (!this.container.config.repoIntelEnabled) return unavailable;
+    const stats = await this.repo.getOnboardingIndexStats(repoId);
+    return stats ? { enabled: true, ...stats } : { ...unavailable, enabled: true };
+  }
+
+  /** Onboarding: one consistent snapshot (see repository for the isolation level). */
+  async getOnboardingSnapshot(repoId: string): Promise<OnboardingSnapshot> {
+    const empty = (base: OnboardingIndexStats): OnboardingSnapshot => ({
+      ...base,
+      files: [],
+      edgeCount: 0,
+      repoMap: null,
+    });
+    const off = await this.getOnboardingIndexStats(repoId);
+    if (!off.enabled) return empty(off);
+    const rows = await this.repo.getOnboardingSnapshotRows(repoId);
+    if (!rows) return empty(off);
+    const files = rows.ranks.map((r) => ({
+      ...r,
+      importers: rows.importers.get(r.path) ?? 0,
+      endpoints: rows.endpoints.get(r.path) ?? [],
+    }));
+    const map = rows.stats.lastIndexedSha
+      ? await this.repo.getRepoMapCache(
+          repoId,
+          rows.stats.lastIndexedSha,
+          DEFAULT_REPO_MAP_TOKEN_BUDGET,
+        )
+      : null;
+    return {
+      enabled: true,
+      ...rows.stats,
+      files,
+      edgeCount: rows.edgeCount,
+      repoMap: map?.mapText ?? null,
+    };
   }
 
   /** Percentile per path from `file_rank` (smart-diff / run-executor "top-N%"). */

@@ -6,6 +6,8 @@ import type {
   CodeIndex,
   Embedder,
   LLMProvider,
+  CloneDocs,
+  CloneFiles,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -29,6 +31,8 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { FsCloneDocs } from '../adapters/clone-docs/index.js';
+import { FsCloneFiles } from '../adapters/clone-files/index.js';
 import { type UrlFetcher, SafeUrlFetcher } from '../adapters/fetcher/index.js';
 
 /**
@@ -54,6 +58,9 @@ export interface ContainerOverrides {
   tokenizer?: Tokenizer;
   /** Remote-document fetcher for skill "Import from URL" (tests inject a fake). */
   urlFetcher?: UrlFetcher;
+  /** Project-context markdown access inside repo clones (tests inject a spy). */
+  cloneDocs?: CloneDocs;
+  cloneFiles?: CloneFiles;
 }
 
 export class Container {
@@ -79,6 +86,8 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _urlFetcher?: UrlFetcher;
+  private _cloneDocs?: CloneDocs;
+  private _cloneFiles?: CloneFiles;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -133,6 +142,19 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** Guarded read/write/discover of project-context .md files in a clone. */
+  get cloneDocs(): CloneDocs {
+    if (this.overrides.cloneDocs) return this.overrides.cloneDocs;
+    this._cloneDocs ??= new FsCloneDocs();
+    return this._cloneDocs;
+  }
+
+  get cloneFiles(): CloneFiles {
+    if (this.overrides.cloneFiles) return this.overrides.cloneFiles;
+    this._cloneFiles ??= new FsCloneFiles();
+    return this._cloneFiles;
   }
 
   /** SSRF-guarded fetcher for skill "Import from URL". */

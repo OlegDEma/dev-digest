@@ -54,6 +54,7 @@ const baseAgent = {
   strategy: 'single-pass',
   ci_fail_on: 'critical',
   repo_intel: true,
+  context_docs: [] as string[],
 } as const;
 
 export const agents: Agent[] = [

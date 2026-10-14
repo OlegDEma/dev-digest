@@ -17,6 +17,7 @@ export const skills = pgTable('skills', {
   enabled: boolean('enabled').notNull().default(true),
   version: integer('version').notNull().default(1),
   evidenceFiles: jsonb('evidence_files').$type<string[]>(),
+  contextDocs: jsonb('context_docs').$type<string[]>().notNull().default([]),
   createdAt: now(),
 });
 
