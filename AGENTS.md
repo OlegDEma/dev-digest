@@ -138,6 +138,9 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   from grep and glob.** A default `rg` skips it (a hidden directory), but `find`,
   `ls`, `Read` by path and `rg --hidden --no-ignore` do not. Listed in
   `.git/info/exclude`; never commit its contents.
+- `.claude/skills/*/evals/fixtures/**` — skill eval inputs: **deliberately
+  broken** code laid out like `server/src/…`. Exclude from grep and glob when
+  looking for real code; never fix them. Layout: `.claude/skill-evals/README.md`.
 - `**/src/vendor/**` — vendored. Exception: `vendor/shared` changes only as part
   of a deliberate contract change.
 - `**/node_modules/**`, `pnpm-lock.yaml`, `package-lock.json`.

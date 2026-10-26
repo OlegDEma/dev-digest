@@ -155,6 +155,10 @@ grep -rnE "fastify" server/src/modules/*/service.ts server/src/modules/*/reposit
 
 # Rule 1 — reviewer-core reaching back into the server
 grep -rnE "from '.*server/src|@devdigest/api" reviewer-core/src
+
+# Rule 8 — timers and cross-module service imports inside modules
+grep -rnE "\b(setInterval|setTimeout)\(|node-cron|from 'cron'" server/src/modules
+grep -rnE "from '\.\./[a-z-]+/service\.js'" server/src/modules
 ```
 
 A hit is a lead, not a verdict — confirm it's a real cross-ring import and not,
