@@ -11,3 +11,5 @@ export * from "./conventions";
 export * from "./intent";
 export * from "./blast";
 export * from "./history";
+export * from "./project-context";
+export * from "./onboarding";

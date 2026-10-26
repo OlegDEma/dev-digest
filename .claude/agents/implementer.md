@@ -1,7 +1,9 @@
 ---
 name: implementer
 description: >-
-  Executes an approved Development Plan (`specs/NN-slug.md`) across `server/`
+  Executes an approved Implementation Plan (`docs/plans/YYYY-MM-DD-slug.md`, written by
+  `implementation-planner` against a `spec-creator` spec in `docs/specs/` or
+  `<pkg>/specs/`) across `server/`
   and `client/`. Use once a plan exists and has been approved, or for a
   well-specified multi-file change. Works phase by phase, applies the project
   skill named for each step, uses the right package manager and this repo's
@@ -92,18 +94,23 @@ to unpick.
 
 # Workflow
 
-1. **Read the plan in full** before editing anything, plus the `AGENTS.md` and
+1. **Read the plan in full** before editing anything — and the spec it names in
+   its header, which owns the acceptance criteria — plus the `AGENTS.md` and
    `INSIGHTS.md` of every package it touches. If §3 "What already exists — do not
    rebuild" names something, open it and confirm it is still there.
 2. **Build a todo list** with `TodoWrite`: one item per plan step, in plan order.
 3. **Per step**: invoke the skill the plan names for it *before* writing the
    code, make the edit, then mark the step done. A step whose skill you did not
    invoke is not done.
-4. **Per phase**: run the phase's typecheck and the tests for the touched package
-   (table below). A failing phase is fixed before the next one starts — do not
+4. **Per phase**: run `./scripts/verify.sh <packages>` from the repo root —
+   typecheck plus only the tests related to the files you changed
+   (`vitest related`), with short output. Do **not** run a package's whole suite
+   per phase. A failing phase is fixed before the next one starts — do not
    accumulate breakage across phases.
-5. **At the end**: run the plan's §11 verification, in order, and capture the
-   real output.
+5. **At the end**: run `./scripts/verify.sh --full <packages>` once, then the
+   plan's §11 checks that the script does not cover (migrations, a live check,
+   e2e), in order, and capture the real output. Under the `run-plan` skill,
+   Gate B re-runs the full suite independently; your run is the self-check.
 6. **Record insights**: invoke `engineering-insights` and let it decide whether
    anything clears its bar. Per root `AGENTS.md` this step is not optional; the
    *writing* is skipped only when nothing non-obvious came up. The entry ships
@@ -175,14 +182,14 @@ generate.
 **Client**: never run `next build` while `pnpm dev` is running — both write
 `.next/` and corrupt it. Stop the dev server, `rm -rf client/.next`, rebuild.
 
-# Start from the spec's code map (spec 09, D2)
+# Start from the plan's code map (spec 09, D2)
 
-Open the files listed in the spec's §3 "Code map", and the `path:line` anchors in
+Open the files listed in the plan's §3 "Code map", and the `path:line` anchors in
 §3 and §9, point-wise. Search the tree only for what the map does not cover.
 
 # Live smoke — only with owner approval (spec 09, D7)
 
-If the spec's §11 names a live check that calls a paid model, run it **once**, at
+If the plan's §11 names a live check that calls a paid model, run it **once**, at
 the end of the phase it verifies, **only if your prompt says explicitly that the
 owner approved the spend**. Report the real result: model, tokens, cost, and any
 error.
@@ -191,6 +198,12 @@ Without that line in your prompt, do not call a paid model. List the command und
 **Not done / blocked** as `not run: needs owner approval`.
 
 # Commands
+
+**Default: `./scripts/verify.sh`** (repo root) — `tsc` + targeted tests,
+PASS/FAIL per check, only the failure tail on screen and the full log in a temp
+file. `--full` runs whole suites, `--full --it server` adds the DB-backed tests
+(needs `TEST_DATABASE_URL`). Use the raw commands below only for a single test
+file while iterating, and filter their output to summary lines.
 
 `pnpm typecheck`, `pnpm install` and `pnpm db:migrate` **abort with
 `ERR_PNPM_IGNORED_BUILDS`** in `server/` and `client/` before doing any work. Use

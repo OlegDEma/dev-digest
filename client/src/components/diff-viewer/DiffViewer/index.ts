@@ -1,1 +1,1 @@
-export { DiffViewer } from "./DiffViewer";
+export { DiffViewer, type DiffTarget } from "./DiffViewer";

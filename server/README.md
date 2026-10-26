@@ -72,14 +72,16 @@ flowchart TB
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
   end
   subgraph Agents["Agents & skills"]
-    agents["agents<br/>/agents · /agents/:id · /agents/:id/skills"]
-    skills["skills<br/>/skills · /skills/:id · /skills/:id/(agents|versions|stats)<br/>/skills/import (preview only)"]
+    agents["agents<br/>/agents · /agents/:id · /agents/:id/skills · /agents/:id/context-docs"]
+    skills["skills<br/>/skills · /skills/:id · /skills/:id/(agents|versions|stats|context-docs)<br/>/skills/import (preview only)"]
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
     blast["blast<br/>/pulls/:id/blast"]
     blast --> repoIntel
     history["history<br/>/pulls/:id/history"]
+    brief["brief<br/>GET /pulls/:id/brief (stored, no model) · POST /pulls/:id/brief (one model call, 5/min)"]
+    projectContext["project-context<br/>/repos/:id/context · /repos/:id/context/document (GET, PUT)"]
   end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]
@@ -101,6 +103,7 @@ flowchart TB
 | `EMBEDDINGS_ENABLED` | `false` | memory/RAG embeddings (OpenAI); off → **zero** OpenAI calls |
 | `REPO_INTEL_ENABLED` | `true` | repo skeleton + callers in the prompt; `false` → ripgrep-only |
 | `DEVDIGEST_CLONE_DIR` | `./clones` | imported-repo checkouts (git-ignored) |
+| `PROJECT_CONTEXT_BUCKETS` | `specs,docs,insights` | folder names whose `.md` files are discoverable as project context |
 | `LOG_LEVEL` | `info` (`silent` in test) | pino level |
 | `NODE_ENV` | `development` | `test` → silent logs + global rate-limit disabled |
 

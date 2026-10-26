@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillSource, SkillType } from '@devdigest/shared';
+import { SetContextDocsBody, SkillSource, SkillType } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -14,6 +14,7 @@ import { SkillsService } from './service.js';
  *   GET    /skills/:id            → one skill
  *   POST   /skills                → create
  *   PUT    /skills/:id            → update / toggle enabled (versions content changes)
+ *   PUT    /skills/:id/context-docs → replace attached project-context paths (no version bump)
  *   DELETE /skills/:id            → delete (agent bindings + versions cascade)
  *   GET    /skills/:id/agents     → agents binding this skill
  *   GET    /skills/:id/versions   → body history (newest first)
@@ -112,6 +113,17 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     if (!skill) throw new NotFoundError('Skill not found');
     return skill;
   });
+
+  app.put(
+    '/skills/:id/context-docs',
+    { schema: { params: IdParams, body: SetContextDocsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const skill = await service.setContextDocs(workspaceId, req.params.id, req.body.context_docs);
+      if (!skill) throw new NotFoundError('Skill not found');
+      return skill;
+    },
+  );
 
   app.delete('/skills/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

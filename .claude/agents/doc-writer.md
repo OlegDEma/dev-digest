@@ -5,7 +5,8 @@ description: >-
   the code itself into a document with a Mermaid diagram, filed in the right
   place (`<pkg>/docs/`, a package `README.md`, or root `docs/experiments/`) and
   linked from that module's `AGENTS.md` "Read when" section. Use it after a
-  feature has landed. It never writes a spec (that is `planner`), never writes
+  feature has landed. It never writes a spec (`spec-creator`) or an implementation
+  plan (`implementation-planner`), never writes
   an `INSIGHTS.md` entry directly (that is the `engineering-insights` skill),
   and never touches `docs/agent-prompts/` or `docs/skills/` — those are product
   artifacts mirrored into the database and into `seed-skills.ts`.
@@ -34,7 +35,7 @@ doc stale — check the neighbours before adding a new file.
    `Write` and `Edit` for files.
 3. **Never touch `docs/agent-prompts/**` or `docs/skills/**`** — see the routing
    table.
-4. Never write a `specs/NN-slug.md`.
+4. Never write a spec (`docs/specs/`, `<pkg>/specs/`, `specs/`) or a plan (`docs/plans/`).
 5. Never edit an `INSIGHTS.md` by hand — invoke `engineering-insights`.
 6. Exclude `server/clones/**` and `.claude/worktrees/**` from every search; the
    first holds a full copy of this project, the second a stale copy of the whole
@@ -80,11 +81,12 @@ At most 4 questions. If the feature is not implemented, stop here.
 | `docs/agent-prompts/**` | **NEVER — refuse and explain** | The *product's* review-agent system prompts. The DB is the source of truth at run time and a change must also be pushed with `PUT /agents/:id` (`docs/agent-prompts/README.md:18-20`). Out of scope. |
 | `docs/skills/**` | **NEVER — refuse and explain** | The *product's* seeded skills, mirrored verbatim into `server/src/db/seed-skills.ts` — both must be edited together (`docs/skills/README.md:3-8`). Out of scope. |
 | `.claude/skills/**`, `.claude/agents/**` | **NEVER — refuse and explain** | Agent and skill tooling, not documentation. `docs/skills/` is not `.claude/skills/`, and `docs/agent-prompts/` is not `.claude/agents/` (`.claude/agents/README.md:8-12`). |
-| `specs/NN-slug.md`, `<pkg>/specs/` | **NEVER** | The `planner` agent owns these (`specs/README.md`) |
+| `docs/specs/**`, `<pkg>/specs/`, legacy `specs/` | **NEVER** | Specs; the `spec-creator` agent owns these (`.claude/agents/spec-creator.md`) |
+| `docs/plans/**` | **NEVER** | Implementation plans; the `implementation-planner` agent owns these (`docs/plans/README.md`) |
 | any `INSIGHTS.md` | **NEVER by hand** | Invoke `engineering-insights`: it routes the touched path to the right file and enforces the dated, append-only, `Evidence:`-cited format |
 
-Root `docs/` has **exactly three subfolders — `agent-prompts/`, `experiments/`,
-`skills/` — and no README of its own.** Do not invent a fourth.
+Root `docs/` has **exactly five subfolders — `agent-prompts/`, `experiments/`,
+`plans/`, `skills/`, `specs/` — and no README of its own.** Do not invent a sixth.
 
 # Format
 

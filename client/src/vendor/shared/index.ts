@@ -3,11 +3,14 @@
  *
  * Exports (Zod schemas + inferred TS types):
  *  - contracts/findings   Review, Finding, Severity, Verdict, FindingAction, trifecta
- *  - contracts/brief      Intent, BlastRadius, Risks, PrHistory, SmartDiff, PrBrief
- *  - contracts/knowledge  Conformance, Onboarding, EvalRun/EvalCase, MemoryItem,
+ *  - contracts/brief      Intent, BlastRadius, Risks, PrHistory, SmartDiff, PrBrief,
+ *                         BriefModelOutput, ReviewFocusItem, PrBriefResponse
+ *  - contracts/knowledge  Conformance, EvalRun/EvalCase, MemoryItem,
  *                         Skill/CommunitySkill, ConventionCandidate, Agent
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
- *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
+ *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, …
+ *  - contracts/project-context  DiscoveredDocument, ProjectContextListing, DocumentContent
+ *  - contracts/onboarding  OnboardingTour, OnboardingTourResponse (C1) and parts
  *  - adapters             adapter interfaces + ModelInfo
  *
  * Feature agents (A1–A6) and F2 import everything from here. The barrel is
@@ -24,4 +27,6 @@ export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';
 export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
+export * from './contracts/project-context.js';
+export * from './contracts/onboarding.js';
 export * from './adapters.js';

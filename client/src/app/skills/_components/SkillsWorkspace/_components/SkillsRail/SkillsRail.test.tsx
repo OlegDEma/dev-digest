@@ -30,6 +30,7 @@ const skill = (id: string, name: string, extra: Partial<SkillSummary> = {}): Ski
   enabled: true,
   version: 1,
   evidence_files: null,
+  context_docs: [],
   used_by: 3,
   pull_pct: 71,
   accept_pct: 74,

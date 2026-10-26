@@ -3,7 +3,7 @@
 Claude Code **subagents** for this repo. Each file here is one agent: YAML
 frontmatter (identity, tools, model) plus a system prompt. Claude delegates to
 one by matching the task against the agent's `description`; you can also name it
-explicitly (`@planner`, "use the implementer subagent to…").
+explicitly (`@implementation-planner`, "use the implementer subagent to…").
 
 > **Not to be confused with `docs/agent-prompts/`.** Those are the *review*
 > agents that run inside the product — their `system_prompt` lives in the
@@ -18,10 +18,11 @@ explicitly (`@planner`, "use the implementer subagent to…").
 | [researcher](researcher.md) | Finds and verifies — in the repo (flows, decisions, history), or in external sources. Reports with evidence and an explicit list of what it could not find | no | `sonnet` | 40 |
 | [investigator](investigator.md) | Read-only structural tracer of the current tree: definitions, importers/callers, consumers of a field, blast radius. No shell, no web | no | `sonnet` | 25 |
 | [brainstorm](brainstorm.md) | Generates and weighs 3–5 options before any plan exists, rubric first; the human chooses | no | `opus` | 30 |
-| [planner](planner.md) | Turns a request into a Development Plan in the house spec format | plan file only | `opus` | 80 |
+| [spec-creator](spec-creator.md) | Writes a spec in English (what/why, EARS ACs, workflow/communication diagrams, boundary contracts) after rounds of gap-finding questions; never plans or codes | spec file only | `opus` | 60 |
+| [implementation-planner](implementation-planner.md) | Reviews an approved spec (restated R-items, questions with defaults, contradictions, recommendations, single- vs multi-agent), then turns it into an Implementation Plan in `docs/plans/`. Never writes specs | plan file only | `opus` | 50 |
 | [implementer](implementer.md) | Executes an approved plan across `server/` and `client/`, runs the tests, reports | source code | `sonnet` | 150 |
-| [test-writer](test-writer.md) | Writes a test for a named behaviour, edge case or bug in `client/`, `server/` or `reviewer-core/`; never changes production code | tests only | `sonnet` | 60 |
-| [architecture-reviewer](architecture-reviewer.md) | Read-only architectural verdict against the onion rings and frontend layout, on a plan, a working tree or a file list. Not the PR gate | no | `opus` | 35 |
+| [test-writer](test-writer.md) | Writes a test for a named behaviour, edge case or bug in `client/`, `server/` or `reviewer-core/`; never changes production code | tests only | `sonnet` — **disabled** (denied in `.claude/settings.json`) | 60 |
+| [architecture-reviewer](architecture-reviewer.md) | Read-only architectural verdict against the onion rings and frontend layout, on a plan, a working tree or a file list. Not the PR gate | no | `sonnet` | 35 |
 | [plan-verifier](plan-verifier.md) | Checks finished code against a plan's acceptance criteria point by point, runs the plan's verification, never fixes | no | `sonnet` | 50 |
 | [doc-writer](doc-writer.md) | Documents an implemented feature with a Mermaid diagram, filed under the right `docs/` or README and linked from `AGENTS.md` | docs only | `sonnet` | 50 |
 | [insight-curator](insight-curator.md) | Read-only audit of all five `INSIGHTS.md` files: duplicates, contradictions, stale evidence, promotions. Proposals only | no | `opus` | 40 |
@@ -34,25 +35,45 @@ Every agent has a `maxTurns` cap and a matching "reserve" rule in its prompt; se
 ```
  design question ──► brainstorm ──► options ──► [you choose] ─┐
                                                               ▼
- request ──► researcher(s) / investigator ──► planner ──► specs/NN + ≤40-line summary
+  request / design ──► spec-creator (rounds of questions) ──► docs/specs/YYYY-MM-DD-slug.md
+                                              │
+                              [you approve: Status: approved]
+                                              │
+ researcher(s) / investigator ───────────────►│
+                                              ▼
+      implementation-planner pass 1 ──► requirements review: questions,
+                                        contradictions, recommendations,
+                                        "single or multi-agent?"
+                                              │
+                    [you answer: Owner answers + Execution mode]
+                                              │ (SendMessage, same agent)
+                                              ▼
+      implementation-planner pass 2 ──► docs/plans/YYYY-MM-DD-slug.md + ≤40-line summary
                                               │
                                               ▼
-                        architecture-reviewer (on the PLAN)
+        architecture-reviewer (on the PLAN) ⇄ planner "revise the plan"
+        (same agents via SendMessage; re-check only open findings; ≤ 2 iterations)
                                               │
                                               ▼
-            [you read the spec file + review, give edits, approve]
+            [you read the plan file + review, give edits, approve]
+                                              │
+ ═══ new chat · /run-plan plan:<path> [design:…] [mode:…] [max-fix:3] — main session orchestrates ═══
+                                              ▼
+ 1. implementer ×N by plan §8 DAG (disjoint owned paths) ──► code + tests per AC + manifest
+    per phase: ./scripts/verify.sh (tsc + related tests)        (diff stat, AC→test)
+    (+ live smoke only if you approved the spend)
                                               │
                                               ▼
-                   implementer ──► code + tests + manifest (diff stat, AC→test)
-                        ▲         (+ live smoke only if you approved the spend)
-                        │                     │
-      fix list via      │                     ▼
-      SendMessage ──────┴── plan-verifier (sonnet) ‖ architecture-reviewer (lite:
-                            from the manifest       §10-sensitive files only)
-                            · security (specs/07) · test-writer · doc-writer, as before
+ 2. REVIEW — parallel, read-only, on the diff, same prefix:
+    architecture-reviewer ‖ plan-verifier ‖ security (only new routes / I/O)
                                               │
                                               ▼
-                     main session: live run in the app ──► short summary to you
+ 3. fix cycle ≤ max-fix: fix list ──SendMessage──► SAME implementer(s)
+    → re-review ONLY changed files by the SAME reviewer ‖ SAME verifier (full suite once)
+    exit: clean · no progress · limit
+                                              │
+                                              ▼
+ 4. report to you (open items, WARNINGs to decide) ──► you run pr-self-review
                                               │
       engineering-insights wrap-up ──► <pkg>/INSIGHTS.md  +  ledger.sh record ──► ledger.tsv
                                                                 │ ledger.sh status = due (>=10 tasks)
@@ -62,7 +83,28 @@ Every agent has a `maxTurns` cap and a matching "reserve" rule in its prompt; se
 Order and cost rules come from [spec 09](../../specs/09-cheaper-agent-pipeline.md):
 - the architecture review of the **plan** happens before approval;
 - review fixes go back to the **same** implementer through `SendMessage`, and the main session edits code only for fixes of ≤ 3 lines;
-- the repo researcher is skipped for single-module features, where the planner does that discovery.
+- the repo researcher is skipped for single-module features, where the implementation planner does that discovery.
+
+Spec and plan are **manual**: the owner runs `/spec` and then
+`implementation-planner`, and reviews both. Execution (steps 1–4) is one
+command, [`/run-plan`](../skills/run-plan/SKILL.md), run in a fresh chat:
+- **Review runs in parallel** — read-only on the same diff, so the agents share
+  a cache-friendly prefix and yield **one** merged fix list per round.
+- **Fix rounds re-review only the delta.** The same reviewer re-checks only its
+  open findings against the changed files; the same verifier re-checks only the
+  open ACs and runs the full suite once. The loop stops when clean, when a round
+  makes no progress, or at `max-fix` (default 3).
+- **`test-writer` is disabled** to save tokens (`permissions.deny:
+  ["Agent(test-writer)"]` in `.claude/settings.json`; remove that line to bring
+  it back). `implementer` writes a test per AC; `plan-verifier` checks each AC
+  has one. Nobody writes `e2e/` unless the plan gives it to an implementer step.
+- **Models for cost:** `implementer`, `plan-verifier`, `architecture-reviewer`
+  run on `sonnet`; the security pass is a `general-purpose` agent pinned to
+  `sonnet` per call. `opus` stays only on the manual, judgement-heavy steps:
+  `spec-creator`, `implementation-planner` (and the rarely-run `brainstorm`,
+  `insight-curator`).
+- **Always launch by exact `subagent_type`.** Plugins can register look-alike
+  "verifier" agents; routing by description could pick one of them.
 
 `researcher` (questions about flows, decisions, history and external behaviour)
 sits beside this flow: its report is a message, pasted into a prompt the same
@@ -93,7 +135,7 @@ Parallel agents that review the same change get an **identical opening block**,
 so the shared prefix is cache-friendly. Their agent-specific task comes last:
 
 ~~~
-Spec: specs/NN-slug.md — start from its §3 code map.
+Spec: docs/specs/YYYY-MM-DD-slug.md · Plan: docs/plans/YYYY-MM-DD-slug.md — start from the plan's §3 code map.
 Implementer manifest (verbatim): <diff stat + AC→test table>
 Owner decisions: <§12 resolutions, one line each>
 Exclude server/clones/** and .claude/worktrees/**.
@@ -104,7 +146,7 @@ Exclude server/clones/** and .claude/worktrees/**.
 ### Main session: token hygiene (spec 09, D9)
 
 The main session's context is re-read on every turn, so what enters it stays expensive:
-- **Plans.** Read the planner's ≤ 40-line summary, not the whole spec. Show the owner the spec *file*.
+- **Plans.** Read the implementation planner's ≤ 40-line summary, not the whole plan. Show the owner the plan *file*.
 - **Screenshots.** Use `scale: 0.5` unless a detail needs full size.
 - **`preview_logs`.** Always pass `search`, with `lines` ≤ 20.
 - **Commands.** Filter test and build output to summary lines (`grep -E "Tests |FAIL"`).
@@ -138,32 +180,56 @@ It keeps flows, decisions, git history and external behaviour. **Budget:**
 
 ---
 
-## planner
+## implementation-planner
 
-**Responsibility.** Research, then **one** document: a plan another agent can
-execute without re-deriving anything. It decides *what*; the project skills
-decide *how*. It writes no code.
+**Responsibility.** Takes an **existing spec written by `spec-creator`** (it does not own the specification) and turns it into
+**one** document: an Implementation Plan another agent can execute without
+re-deriving anything. The spec decides *what* and owns the acceptance criteria;
+the plan decides *how, in which order, in which files, by which agents*; the
+project skills decide *how the code is written*. It writes no spec and no code,
+and never adds or rewords an AC. Without a spec path it refuses.
 
 | | |
 |---|---|
-| **Tools** | `Read, Grep, Glob, Bash, Write, TodoWrite, Skill` — `Write` is scoped by instruction to `specs/` only; **no `Edit`**, so it cannot modify an existing source file at all |
+| **Tools** | `Read, Grep, Glob, Bash, Write, TodoWrite, Skill` — `Write` is scoped by instruction to `docs/plans/` only; **no `Edit`**, so it cannot modify a spec or a source file at all |
 | **Preloaded skill** | `onion-architecture` — loaded in full at startup, because ring boundaries constrain the *shape* of the plan, not just the code |
 | **Model** | `opus` |
-| **Input** | A feature request with a user-visible outcome. Otherwise it asks first and plans nothing |
-| **Output** | `specs/NN-slug.md` (root for ≥2 packages, `<pkg>/specs/` for one). Final message = path + phase/step count + open questions + the riskiest tripwire |
+| **Input** | A path to an existing `docs/specs/YYYY-MM-DD-slug.md` (or `<pkg>/specs/YYYY-MM-DD-slug.md`); pass 2 needs `Status: approved`. Pass 2 also needs an `## Owner answers` block with `Execution mode: single \| multi` |
+| **Output** | Pass 1: a requirements review (requirements restated as R1, R2…, 1–4 questions with best-guess defaults, contradictions, recommendations as advice, the single-/multi-agent question with a default: multi for non-trivial, single for small or tightly coupled) — writes nothing. Pass 2: `docs/plans/YYYY-MM-DD-slug.md` + final message = path + mode/lanes/phases/steps + open questions + riskiest tripwire + ≤ 40-line summary |
 
-**Plan skeleton** (§ numbers as written): Summary + Out of scope → Decisions
-table → *What already exists — do not rebuild* → Data model → Contracts →
-Server → Client → EARS acceptance criteria → phased plan → Risks → Verification
-→ Open questions. See [planner.md:164](planner.md:164).
+**Manual launch only.** Neither `spec-creator` nor the `spec` skill chains into it; the owner starts it with an approved spec path.
+
+**Two passes, always.** Pass 1 is mandatory even for a clear spec, because the
+execution mode is the owner's call and is asked every time
+([implementation-planner.md:107](implementation-planner.md:107)). The main session
+relays the review, collects the owner's answers, and continues the **same**
+agent with `SendMessage` for pass 2. A recommendation that needs a spec change
+goes to `spec-creator` and is re-approved first; the planner re-reads the spec in
+pass 2 and never patches it in the plan.
+
+**Plan skeleton** (§ numbers as written): Requirements review (AC inventory from
+the spec → steps → checks, owner answers, recommendations) → Implementation
+decisions → *What already exists — do not rebuild* + Code map → Data model →
+Contracts → Server → Client → Execution mode & agent lanes → phased plan →
+Risks → Verification → Open questions. See
+[implementation-planner.md:346](implementation-planner.md:346).
+
+**Multi-agent lanes.** Lanes are instructions to the main session (no agent can
+delegate): contracts/schema run first and serially, parallel lanes own disjoint
+file sets or use `isolation: worktree`, review lanes are "main session runs this"
+([implementation-planner.md:327](implementation-planner.md:327)).
 
 **Why the plan can't contradict implementation rules.** Every step in §9 carries
-the project skill the implementer will apply to it ([planner.md:100](planner.md:100)),
-and `onion-architecture` is already in the planner's context — so a step that
-puts Drizzle in a `service.ts` is caught while planning, not in review.
+the project skill the implementer will apply to it
+([implementation-planner.md:262](implementation-planner.md:262)), and
+`onion-architecture` is already in the planner's context — so a step that puts
+Drizzle in a `service.ts` is caught while planning, not in review.
 
-**Budget:** `maxTurns: 80`, reserve 8 — in the reserve it writes the plan with
-what is known and lists the rest under Open questions.
+**Budget:** `maxTurns: 50`, reserve 5 (was 80/8 until 2026-10-11; cut because
+the spec phase's research now reaches it via `docs/research/<slug>.research.md`
+instead of being re-done) — in the reserve, pass 1 returns the review
+with what is known; pass 2 writes the plan with what is known and lists the rest
+under Open questions.
 
 ---
 
@@ -178,7 +244,7 @@ plan already decided.
 | **Tools** | `Read, Edit, Write, Bash, Grep, Glob, TodoWrite, Skill` |
 | **Denied** | `disallowedTools: WebSearch, WebFetch` — a denylist, applied before `tools` resolve. Research is the researcher's job |
 | **Model** | `sonnet` |
-| **Input** | Path to an approved `specs/NN-slug.md`. If a first-phase dependency sits in the plan's *Open questions*, or a cited path is missing, it stops and asks |
+| **Input** | Path to an approved `docs/plans/YYYY-MM-DD-slug.md` (its header names the spec). If a first-phase dependency sits in the plan's *Open questions*, or a cited path is missing, it stops and asks |
 | **Output** | Working code + an Implementation Report: AC status table, changes, skills applied, verification with **verbatim** command output, deviations, blocked items, **For review**, insight recorded. See [implementer.md:193](implementer.md:193) |
 
 **Boundaries.** No architecture review, no security audit, no `pr-self-review`,
@@ -198,6 +264,10 @@ step, never starts a new phase, and reports the last checkpoint that passed.
 ---
 
 ## test-writer
+
+> **Disabled since 2026-10-11** to save tokens: `permissions.deny:
+> ["Agent(test-writer)"]` in `.claude/settings.json`. Implementers write the
+> test per AC. Delete that deny entry to re-enable.
 
 **Responsibility.** Write the test for a stated behaviour: a named edge case, a
 bug reproduced as a failing test first, or the happy path of an untested file.
@@ -235,7 +305,7 @@ mid-implementation working tree, or a named file list.
 | **Tools** | `Read, Grep, Glob, TodoWrite, Skill` — no write tool and **no `Bash`** |
 | **Denied** | `disallowedTools: Write, Edit, NotebookEdit, Bash, WebSearch, WebFetch` — listed even though absent from `tools`, so a careless later edit to the allowlist still cannot add them |
 | **Preloaded skill** | `onion-architecture` |
-| **Model** | `opus` (`effort: high`) |
+| **Model** | `sonnet` (`effort: high`) — moved from `opus` 2026-10-11 to cut cost; its checks are a closed 7-rule list. Revert if `pr-self-review` starts catching ring violations it missed |
 | **Input** | A path list, a module, a plan path, or pasted diff text; optionally the change's intent in one sentence |
 | **Output** | An Architecture Verdict: `approve` / `request_changes` / `comment`, findings `AR-n` with `CRITICAL \| WARNING \| SUGGESTION`, **Checked and clean**, **Pre-existing**, **Not verified** |
 
@@ -269,7 +339,7 @@ commands run for real.
 | **Input** | A plan path (required) and the state to check (working tree by default). An Implementation Report, if given, is a claim to refute — and its per-AC test column + diff stat is the map it starts from (spec 09 D6) |
 | **Output** | A Plan Verification Report: one table row per AC in plan order, step table, out-of-scope check, verification run, findings `PV-n`, **Plan defects** |
 
-**Reads legacy specs.** Specs `01`–`04` predate the planner skeleton: it finds
+**Reads legacy specs.** Specs `01`–`04` predate the planner skeleton, and `01`–`12` predate the spec/plan split (plan + ACs in one file): it finds
 ACs by scanning for `**AC-<n>` rather than by section, qualifies repeated ids
 (`specs/03-skills.md` has two AC blocks), compares step tables by symbol not line
 number, and derives its commands (saying so) when there is no §11. Generic
@@ -332,7 +402,7 @@ casings.
 | **Output** | A Trace Report: Answer, Definitions, **Edges** (each with `path:line`, inferred edges marked), Blast radius, Drift noticed, **Not searched** |
 
 **Boundaries.** No history, no explanation, no recommendation, no ring verdict.
-The main session fans it out and pastes the report into `planner`,
+The main session fans it out and pastes the report into `implementation-planner`,
 `implementer`, `brainstorm` or `architecture-reviewer`.
 
 ---
@@ -354,12 +424,12 @@ a recommendation, runner-up and flip condition. **The human chooses.**
 | **Model** | `opus` (`effort: high`) |
 | **Budget** | `maxTurns: 30`, reserve 3 |
 | **Input** | A design question with the wanted outcome; optional constraints, rubric, option count (3–5) |
-| **Output** | An Options Report ending in a *Hand-off to planner* block the main session pastes into `planner` after the human picks |
+| **Output** | An Options Report ending in a *Hand-off to the spec* block the owner uses when writing the spec after picking |
 
 **Limit, stated in the prompt.** Options from one context are correlated and
 self-scored; a real Best-of-N is the main session running 2–3 instances in
-parallel, at roughly 15x the tokens. It writes no file — `planner` stays the sole
-spec writer.
+parallel, at roughly 15x the tokens. It writes no file — specs stay the owner's, plans stay
+`implementation-planner`'s.
 
 ---
 
@@ -404,16 +474,16 @@ The prompts are grounded, not invented. Two families:
 
 | Rule | Where in the agents |
 |---|---|
-| Omitting `tools` makes a subagent inherit **every** available tool — least privilege needs an explicit list | [planner.md:14](planner.md:14), [implementer.md:13](implementer.md:13) |
+| Omitting `tools` makes a subagent inherit **every** available tool — least privilege needs an explicit list | [implementation-planner.md:19](implementation-planner.md:19), [implementer.md:13](implementer.md:13) |
 | `disallowedTools` is a denylist resolved *before* `tools` | [implementer.md:14](implementer.md:14) |
 | Delegation is driven solely by `description`; it must single out one agent | the `description` blocks of both files |
-| A subagent gets a fresh context window and returns only a summary | file-based hand-off: [planner.md:251](planner.md:251) → [implementer.md:83](implementer.md:83) |
-| One subagent, one job; restrict tools for focus as well as safety | [implementer.md:31](implementer.md:31) (no review), planner has no `Edit` |
-| `skills:` preloads the **full** skill body at startup, not just its description | [planner.md:16](planner.md:16) — one skill, deliberately |
-| *Explore → plan → code → commit*: separate planning from implementation | the planner/implementer split itself |
-| Spec hand-off: a finished spec is executed by a fresh context | [planner.md:164](planner.md:164) — output is a file |
-| A good spec names the files involved, states what is out of scope, ends with an end-to-end check | [planner.md:178](planner.md:178), [planner.md:228](planner.md:228) |
-| Plan mode has real overhead — skip it for a one-sentence diff | [planner.md:240](planner.md:240) |
+| A subagent gets a fresh context window and returns only a summary | file-based hand-off: [implementation-planner.md:470](implementation-planner.md:470) → [implementer.md:83](implementer.md:83) |
+| One subagent, one job; restrict tools for focus as well as safety | [implementer.md:31](implementer.md:31) (no review), implementation-planner has no `Edit` |
+| `skills:` preloads the **full** skill body at startup, not just its description | [implementation-planner.md:22](implementation-planner.md:22) — one skill, deliberately |
+| *Explore → plan → code → commit*: separate planning from implementation | the spec → implementation-planner → implementer split itself |
+| Spec hand-off: a finished spec is executed by a fresh context | [implementation-planner.md:346](implementation-planner.md:346) — output is a file |
+| A good spec names the files involved, states what is out of scope, ends with an end-to-end check | [implementation-planner.md:380](implementation-planner.md:380), [implementation-planner.md:429](implementation-planner.md:429) |
+| Plan mode has real overhead — skip it for a one-sentence diff | [implementation-planner.md:452](implementation-planner.md:452) |
 | Review belongs in a separate, fresh context that sees the diff, not the author's reasoning | [implementer.md:232](implementer.md:232) — **For review** |
 | `permissionMode` is ignored when the parent runs in `bypassPermissions`, `acceptEdits` or `auto`, and even when honoured only gates by prompting — the `tools` allowlist is the hard restriction (a tool left out "isn't in the subagent's session at all" — that quote is **unverified** against the primary page) | [architecture-reviewer.md](architecture-reviewer.md) — Role; no agent here sets `permissionMode` |
 | `memory:` force-enables Read, Write and Edit so the agent can manage its memory files | no agent here sets `memory` (incompatible with read-only) |
@@ -454,17 +524,17 @@ Verified on 2026-09-29 against the primary pages unless marked otherwise.
 
 | Rule | Source | Where in the agents |
 |---|---|---|
-| Read `specs/` → `docs/` → `INSIGHTS.md` → source, and cite what answered you | root [`AGENTS.md`](../../AGENTS.md) | [planner.md:76](planner.md:76), [implementer.md:83](implementer.md:83) |
+| Read `specs/` → `docs/` → `INSIGHTS.md` → source, and cite what answered you | root [`AGENTS.md`](../../AGENTS.md) | [implementation-planner.md:225](implementation-planner.md:225), [implementer.md:83](implementer.md:83) |
 | Record insights at the end of a non-trivial task | root `AGENTS.md` | [implementer.md:95](implementer.md:95) |
-| House spec format: `NN-slug.md`, Decisions table, "do not rebuild" table, EARS criteria | [`specs/README.md`](../../specs/README.md), [`specs/04-conventions.md`](../../specs/04-conventions.md) | [planner.md:164](planner.md:164) |
-| This repo ships pre-staged scaffolding with no module behind it — grep before planning to create | root [`INSIGHTS.md`](../../INSIGHTS.md) → Codebase Patterns, 2026-08-05 | [planner.md:91](planner.md:91) |
-| Nine cross-cutting tripwires (two `vendor/shared` trees, snake/camel, per-enum casing, generated migrations, auth on new routes, …) | root `AGENTS.md`, [`pr-self-review/references/repo-tripwires.md`](../skills/pr-self-review/references/repo-tripwires.md) | [planner.md:138](planner.md:138), [implementer.md:122](implementer.md:122) |
-| `pnpm typecheck` / `install` / `db:migrate` abort on `ERR_PNPM_IGNORED_BUILDS` — use the direct binaries | root `AGENTS.md`, [`server/INSIGHTS.md`](../../server/INSIGHTS.md) | [planner.md:154](planner.md:154), [implementer.md:166](implementer.md:166) |
-| Inward-only dependencies; Drizzle only in repositories; external I/O only through a container port | [`onion-architecture`](../skills/onion-architecture/SKILL.md) | [planner.md:124](planner.md:124), [implementer.md:150](implementer.md:150) |
-| `arch:check` and dependency-cruiser **do not exist** — nothing catches a boundary violation mechanically | `server/INSIGHTS.md` → Tool & Library Notes, 2026-09-21 | [planner.md:42](planner.md:42), [implementer.md:155](implementer.md:155) |
+| House spec format: `NN-slug.md`, Decisions table, "do not rebuild" table, EARS criteria | [`specs/README.md`](../../specs/README.md), [`specs/04-conventions.md`](../../specs/04-conventions.md) | [implementation-planner.md:346](implementation-planner.md:346) |
+| This repo ships pre-staged scaffolding with no module behind it — grep before planning to create | root [`INSIGHTS.md`](../../INSIGHTS.md) → Codebase Patterns, 2026-08-05 | [implementation-planner.md:253](implementation-planner.md:253) |
+| Nine cross-cutting tripwires (two `vendor/shared` trees, snake/camel, per-enum casing, generated migrations, auth on new routes, …) | root `AGENTS.md`, [`pr-self-review/references/repo-tripwires.md`](../skills/pr-self-review/references/repo-tripwires.md) | [implementation-planner.md:297](implementation-planner.md:297), [implementer.md:122](implementer.md:122) |
+| `pnpm typecheck` / `install` / `db:migrate` abort on `ERR_PNPM_IGNORED_BUILDS` — use the direct binaries | root `AGENTS.md`, [`server/INSIGHTS.md`](../../server/INSIGHTS.md) | [implementation-planner.md:312](implementation-planner.md:312), [implementer.md:166](implementer.md:166) |
+| Inward-only dependencies; Drizzle only in repositories; external I/O only through a container port | [`onion-architecture`](../skills/onion-architecture/SKILL.md) | [implementation-planner.md:286](implementation-planner.md:286), [implementer.md:150](implementer.md:150) |
+| `arch:check` and dependency-cruiser **do not exist** — nothing catches a boundary violation mechanically | `server/INSIGHTS.md` → Tool & Library Notes, 2026-09-21 | [implementation-planner.md:81](implementation-planner.md:81), [implementer.md:155](implementer.md:155) |
 | `*.it.test.ts` are DB-backed and run serially; everything else stays hermetic | [`TESTING.md`](../../TESTING.md) | [implementer.md:186](implementer.md:186) |
 | Required contract fields break every literal incl. fixtures · `drizzle-kit generate` hangs on drop+add · `void done.catch()` · `next build` corrupts a live `.next/` | `server/INSIGHTS.md`, `client/INSIGHTS.md` | [implementer.md:136](implementer.md:136) |
-| Skill routing per layer; `pr-self-review` is a PR gate, not an implementation step | [`.claude/skills/README.md`](../skills/README.md) | [planner.md:100](planner.md:100), [implementer.md:100](implementer.md:100), [test-writer.md](test-writer.md) |
+| Skill routing per layer; `pr-self-review` is a PR gate, not an implementation step | [`.claude/skills/README.md`](../skills/README.md) | [implementation-planner.md:262](implementation-planner.md:262), [implementer.md:100](implementer.md:100), [test-writer.md](test-writer.md) |
 | House severity vocabulary is exactly `CRITICAL \| WARNING \| SUGGESTION` | [`docs/agent-prompts/README.md:79-81`](../../docs/agent-prompts/README.md) | [architecture-reviewer.md](architecture-reviewer.md), [plan-verifier.md](plan-verifier.md) — keep in step if the scale ever changes |
 | Anti-inflation: speculative ⇒ at most WARNING; drop a likely false positive; state the mechanism; only what this change introduced | [`docs/agent-prompts/general-reviewer.md:42-47,61-63,73`](../../docs/agent-prompts/general-reviewer.md) | same two files |
 | `pr-self-review` scope and caps (4 agents, 40 findings per slice; excludes `**/*.md`, `docs/**`, `specs/**`) | [`routing.md:14-15,50`](../skills/pr-self-review/routing.md) | [architecture-reviewer.md](architecture-reviewer.md) — What you are not |
@@ -482,7 +552,7 @@ Verified on 2026-09-29 against the primary pages unless marked otherwise.
 ## What the configuration does and does not guarantee
 
 **Enforced by the harness**: the `tools` allowlist and `disallowedTools`. The
-planner genuinely cannot call `Edit`; the implementer genuinely cannot reach the
+implementation planner genuinely cannot call `Edit`; the implementer genuinely cannot reach the
 web; `architecture-reviewer` genuinely cannot write or run a shell command.
 
 **`permissionMode` is not a reliable read-only mechanism for a subagent.** It is
@@ -495,7 +565,7 @@ force-enables Read/Write/Edit). Do not add either to "harden" an agent.
 `brainstorm`, `investigator` and `insight-curator` — because none has `Bash` or a
 write tool, and each names them in `disallowedTools`. None lists `Agent` in
 `tools`, so none can delegate (an allowlist that omits it is enough; the tool is
-`Agent`, formerly `Task`). **Six agents hold `Bash`** — `researcher`, `planner`,
+`Agent`, formerly `Task`). **Six agents hold `Bash`** — `researcher`, `implementation-planner`,
 `implementer`, `test-writer`, `plan-verifier`, `doc-writer` — so their
 restrictions are prompt-only.
 
@@ -518,9 +588,9 @@ prompt-level and approximate: the model may not see a turn counter, so it counts
 its own tool rounds through `TodoWrite`. An agent that hits `Not finished` on
 ordinary work is a signal to raise its row, not to remove the cap.
 
-**Enforced only by the prompt**: read-only `Bash` in the planner, the researcher
+**Enforced only by the prompt**: read-only `Bash` in the implementation planner, the researcher
 and the doc-writer; "no `git commit`"; "don't refactor outside the plan";
-"`Write` only under `specs/`"; the plan-verifier's "run only the plan's own
+"`Write` only under `docs/plans/`"; the plan-verifier's "run only the plan's own
 commands". `Bash` has no allow-`rg`-deny-`sed -i` switch — an agent with `Bash`
 can write through the shell. If you want a hard guarantee, it belongs in
 `permissions.deny` in `settings.json`, not in an agent file.

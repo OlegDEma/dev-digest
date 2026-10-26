@@ -118,6 +118,39 @@ export interface RefRow {
   declFile: string | null;
 }
 
+/** Index state as the onboarding tour needs it (walk stats are null when unknown). */
+export interface OnboardingIndexStats {
+  /** False when repo-intel is switched off (status is then `degraded`). */
+  enabled: boolean;
+  status: IndexStatus;
+  filesIndexed: number;
+  filesSkipped: number;
+  lastIndexedSha: string | null;
+  /** `stats.totalCandidates` of the last FULL index; null after an incremental refresh. */
+  totalCandidates: number | null;
+  /** Files left out by the 5,000-file cap; null when unknown. */
+  bounded: number | null;
+  hotnessAvailable: boolean;
+}
+
+export interface OnboardingSnapshotFile {
+  path: string;
+  pagerank: number;
+  hotness: number;
+  rank: number;
+  percentile: number;
+  /** Distinct files importing this one. */
+  importers: number;
+  endpoints: string[];
+}
+
+export interface OnboardingSnapshot extends OnboardingIndexStats {
+  files: OnboardingSnapshotFile[];
+  edgeCount: number;
+  /** Cached repo map for `lastIndexedSha`; never rebuilt here. */
+  repoMap: string | null;
+}
+
 export interface FileRankRow {
   path: string;
   percentile: number;
@@ -184,4 +217,10 @@ export interface RepoIntel {
     opts?: { exclude?: string[]; includeTests?: boolean },
   ): Promise<string[]>;
   getCriticalPaths(repoId: string): Promise<string[][]>;
+
+  // --- Onboarding tour: one consistent snapshot read per generation --------
+  /** Cheap state read for the tour page (`current_index`); never builds anything. */
+  getOnboardingIndexStats(repoId: string): Promise<OnboardingIndexStats>;
+  /** Index row + every ranked file + edge/endpoint counts + cached repo map, read once. */
+  getOnboardingSnapshot(repoId: string): Promise<OnboardingSnapshot>;
 }

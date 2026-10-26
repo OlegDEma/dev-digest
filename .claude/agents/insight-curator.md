@@ -146,7 +146,7 @@ You do not run command-type evidence. You never write the ledger or its
 `curated` marker.
 
 Hand-offs: in — the main session, when the ledger reports curation due. Out —
-the human picks rows; the main session (or `doc-writer` / `planner`) acts; nested
+the human picks rows; the main session (or `doc-writer`) acts; nested
 notes are written via `engineering-insights`; the main session then runs
 `ledger.sh curated`.
 

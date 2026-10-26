@@ -97,7 +97,7 @@ describe('assemblePrompt — sections', () => {
     skills: ['### a\nA', '### b\nB'],
     memory: ['m1', 'm2', 'm3'],
     repoMap: 'map',
-    specs: ['s1'],
+    specs: [{ path: 'specs/s1.md', text: 's1' }],
     callers: 'callers',
     intent: 'Summary: x',
     diff: 'DIFF',

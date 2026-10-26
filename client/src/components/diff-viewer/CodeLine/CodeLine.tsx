@@ -41,7 +41,10 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div
+        style={lineRowFor(ln.kind)}
+        data-new-line={ln.kind === "add" || ln.kind === "ctx" ? ln.newNo : undefined}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

@@ -75,6 +75,40 @@ export interface StructuredResult<T> {
   attempts: number;
 }
 
+/**
+ * Thrown by an LLMProvider when a structured call exhausts its retries without
+ * a schema-valid reply. Carries the accounting of all attempts, never the raw
+ * model output. Match with `isStructuredOutputError` (by name, safe across
+ * module instances).
+ */
+export class StructuredOutputError extends Error {
+  readonly statusCode = 502;
+  readonly schemaName: string;
+  readonly attempts: number;
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly costUsd: number | null;
+  constructor(info: {
+    schemaName: string;
+    attempts: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number | null;
+  }) {
+    super(`LLM output failed schema validation for ${info.schemaName} after ${info.attempts} attempt(s)`);
+    this.name = 'StructuredOutputError';
+    this.schemaName = info.schemaName;
+    this.attempts = info.attempts;
+    this.tokensIn = info.tokensIn;
+    this.tokensOut = info.tokensOut;
+    this.costUsd = info.costUsd;
+  }
+}
+
+export function isStructuredOutputError(e: unknown): e is StructuredOutputError {
+  return e instanceof Error && e.name === 'StructuredOutputError';
+}
+
 export interface LLMProvider {
   readonly id: 'openai' | 'anthropic';
   listModels(): Promise<ModelInfo[]>;
@@ -248,4 +282,42 @@ export interface SecretsProvider {
    * providers (e.g. the env-only MVP backend) may omit it.
    */
   set?(key: SecretKey, value: string): Promise<void>;
+}
+
+// ---------- CloneDocs (project-context markdown files inside a repo clone) ----------
+export interface CloneDocEntry {
+  path: string;
+  sizeBytes: number;
+  mtimeMs: number;
+}
+
+export type CloneDocRead =
+  | { kind: 'ok'; text: string; sizeBytes: number; mtimeMs: number }
+  | { kind: 'not_found' | 'outside_repo' | 'unreadable' }
+  | { kind: 'too_large'; sizeBytes: number };
+
+export type CloneDocWrite = 'ok' | 'not_found' | 'outside_repo' | 'write_failed';
+
+export interface CloneDocs {
+  /** null = clone root missing. Never follows symlinked entries. */
+  discover(
+    root: string,
+    opts: { buckets: readonly string[]; excludedDirs: readonly string[] },
+  ): Promise<CloneDocEntry[] | null>;
+  read(root: string, path: string, maxBytes: number): Promise<CloneDocRead>;
+  /** Atomic replace of an EXISTING file; never creates. */
+  write(root: string, path: string, text: string): Promise<CloneDocWrite>;
+  /** The only method that spawns git. */
+  isTracked(root: string, path: string): Promise<boolean>;
+}
+
+// ---------- CloneFiles (read-only file probes inside a repo clone) ----------
+export interface CloneFiles {
+  rootExists(root: string): Promise<boolean>;
+  /** Sorted direct child directory names; no symlinks; skips `.git` and `node_modules`. */
+  listChildDirs(root: string): Promise<string[]>;
+  /** Existence probe only — never opens the file. */
+  fileExists(root: string, path: string): Promise<'file' | 'missing' | 'outside_repo'>;
+  /** Refuses `.env` / `.env.*`; resolves symlinks and rejects targets outside the root. */
+  readText(root: string, path: string, maxBytes: number): Promise<CloneDocRead>;
 }

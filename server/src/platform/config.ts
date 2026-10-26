@@ -26,6 +26,9 @@ const EnvSchema = z.object({
   // Note: even when on, sections only populate once the repo is indexed; an
   // unindexed repo degrades gracefully. Per-agent override: agents.repo_intel.
   REPO_INTEL_ENABLED: z.string().optional(),
+  // Comma list of folder names that make a markdown file project-context
+  // eligible (default specs,docs,insights).
+  PROJECT_CONTEXT_BUCKETS: z.string().optional(),
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
@@ -43,6 +46,8 @@ const EnvSchema = z.object({
     z.enum(['off', 'summary', 'verbose']).optional(),
   ),
 });
+
+export const DEFAULT_PROJECT_CONTEXT_BUCKETS: readonly string[] = ['specs', 'docs', 'insights'];
 
 export type PromptLogMode = 'off' | 'summary' | 'verbose';
 
@@ -67,6 +72,8 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** Folder names whose markdown files are discoverable as project context. */
+  projectContextBuckets: string[];
   /** Structured `prompt.assembled` logging: what was asked for vs what is in force. */
   promptLog: {
     requested: PromptLogMode;
@@ -95,6 +102,14 @@ export function resolvePromptLog(
   return { requested: req, effective: req, downgradeReason: null };
 }
 
+function parseBuckets(raw: string | undefined): string[] {
+  const list = (raw ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0);
+  return list.length > 0 ? [...new Set(list)] : [...DEFAULT_PROJECT_CONTEXT_BUCKETS];
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.parse(env);
   const cloneDirRaw =
@@ -111,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    projectContextBuckets: parseBuckets(parsed.PROJECT_CONTEXT_BUCKETS),
     promptLog: resolvePromptLog(parsed.PROMPT_LOG, parsed.NODE_ENV, env.CI),
   };
 }

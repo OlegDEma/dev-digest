@@ -9,6 +9,7 @@ import type {
   ReviewStrategy,
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
+import { validateContextDocs } from '../_shared/doc-path.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
 /**
@@ -109,6 +110,13 @@ export class AgentsService {
       ...(patch.repo_intel !== undefined ? { repoIntel: patch.repo_intel } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     });
+    return row ? toAgentDto(row) : undefined;
+  }
+
+  /** Replace the agent's attached project-context paths (whole ordered list). */
+  async setContextDocs(workspaceId: string, id: string, docs: string[]): Promise<Agent | undefined> {
+    const valid = validateContextDocs(docs);
+    const row = await this.repo.setContextDocs(workspaceId, id, valid);
     return row ? toAgentDto(row) : undefined;
   }
 

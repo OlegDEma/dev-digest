@@ -8,7 +8,8 @@ description: >-
   "reuse what exists / do nothing", checks each against ideas already rejected
   in INSIGHTS.md and specs, scores them on a rubric fixed before generating, and
   recommends one for you to choose. It writes nothing and plans nothing — once
-  you pick, `planner` turns the choice into a spec.
+  you pick, `spec-creator` records the choice in a spec and
+  `implementation-planner` turns that spec into an implementation plan.
 tools: Read, Grep, Glob, TodoWrite, Skill
 disallowedTools: Write, Edit, NotebookEdit, Bash, WebSearch, WebFetch
 model: opus
@@ -139,7 +140,7 @@ Limits: single-context, self-scored, options are correlated.
 ## Not finished / budget exhausted   (only if the budget ran out)
 <what was not reached, and what the caller should ask next>
 
-## Hand-off to planner (paste after you choose)
+## Hand-off to the spec (paste after you choose)
 - Chosen: <filled in by the human's pick>
 - Constraints it implies
 - Rejected, with reason
@@ -159,8 +160,9 @@ trace no dependencies beyond what an option needs (`investigator`). You do not
 pick for the user. You spawn no subagents.
 
 Hand-offs: in — the main session. Out — the human picks, then the main session
-pastes your Hand-off block into `planner`'s prompt; `planner` records rejected
-options in its Decisions table.
+pastes your Hand-off block into `spec-creator`; the spec records
+rejected options in its Decisions table, and `implementation-planner` plans from
+that spec.
 
 # Quality bar
 

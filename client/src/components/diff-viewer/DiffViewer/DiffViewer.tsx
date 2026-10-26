@@ -11,12 +11,23 @@ import { type DiffCommentApi } from "../comments";
 import { s } from "../styles";
 import { FileCard } from "../FileCard";
 
+/** Deep-link target: only the card whose path is exactly `path` reacts to it. */
+export interface DiffTarget {
+  path: string;
+  line: number | null;
+  nonce: number;
+}
+
 export function DiffViewer({
   files,
   commenting,
+  target,
+  onTargetHandled,
 }: {
   files: PrFile[];
   commenting?: DiffCommentApi;
+  target?: DiffTarget;
+  onTargetHandled?: () => void;
 }) {
   const t = useTranslations("shell");
   if (!files || files.length === 0) {
@@ -25,7 +36,13 @@ export function DiffViewer({
   return (
     <div style={s.list}>
       {files.map((f) => (
-        <FileCard key={f.path} file={f} commenting={commenting} />
+        <FileCard
+          key={f.path}
+          file={f}
+          commenting={commenting}
+          focus={target && f.path === target.path ? { line: target.line, nonce: target.nonce } : undefined}
+          onFocusHandled={target && f.path === target.path ? onTargetHandled : undefined}
+        />
       ))}
     </div>
   );

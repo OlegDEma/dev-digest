@@ -56,6 +56,17 @@ export const s = {
   } satisfies CSSProperties,
 
   // ---- PromptBlock ----
+  miniBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 4,
+    borderRadius: 5,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
   promptRow: {
     borderRadius: 6,
     border: "1px solid var(--border)",

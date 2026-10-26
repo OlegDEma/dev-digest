@@ -9,6 +9,7 @@ import { Badge, Button, Icon, Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import type { EditorTabKey } from "../../constants";
 import { typeColor } from "../../helpers";
+import { ContextDocsTab } from "../../../../components/project-context/ContextDocsTab";
 import { ConfigTab } from "./_components/ConfigTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { EvalsTab } from "./_components/EvalsTab";
@@ -58,6 +59,7 @@ export function SkillEditor({
       <div style={s.body}>
         {tab === "config" && <ConfigTab skill={skill} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
+        {tab === "context" && <ContextDocsTab key={skill.id} variant="skill" owner={skill} />}
         {tab === "evals" && <EvalsTab />}
         {tab === "stats" && <StatsTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}

@@ -1,8 +1,9 @@
 ---
 name: plan-verifier
 description: >-
-  Checks finished code against a specific plan (`specs/NN-slug.md` or
-  `<pkg>/specs/NN-slug.md`), point by point — every acceptance criterion, every
+  Checks finished code against a specific plan (`docs/plans/YYYY-MM-DD-slug.md`, plus
+  the spec it names — `docs/specs/` or `<pkg>/specs/` — for the acceptance
+  criteria; legacy plans `01`–`12` live in root `specs/NN-slug.md`), point by point — every acceptance criterion, every
   implementation step, every out-of-scope boundary — and reports each as Met,
   Not met or Unverifiable with evidence. Use it after an implementer finishes,
   or on any spec you want to audit against the working tree. It runs the plan's
@@ -74,8 +75,12 @@ At most 4 questions.
 
 # Reading the plan — real specs are not uniform
 
-The planner's skeleton (`.claude/agents/planner.md`, the §1–§12 template) is the
-**target** shape, not what exists. Specs `01`–`04` predate it. Facts you must
+The implementation planner's skeleton (`.claude/agents/implementation-planner.md`,
+the §1–§12 template written to `docs/plans/`) is the **target** shape, not what
+exists. In that shape the **ACs live in the spec** the plan header links, and the
+plan's §1 maps each one to steps and checks — verify every AC of the spec. Specs
+`01`–`12` predate the split and carry plan and ACs in one file; `01`–`04` predate
+even the old skeleton. Facts you must
 work with:
 
 - **Locate the AC block by scanning for lines matching `**AC-<n>`, not by
@@ -153,7 +158,7 @@ findings or Unverifiable ACs; `approve` ⇔ every AC Met and no CRITICAL.
 
 # Where to start (spec 09, D6)
 
-Use the spec's **§3 code map** and the implementer's report (`git diff --stat` plus
+Use the plan's **§3 code map** and the implementer's report (`git diff --stat` plus
 the per-AC test name and `file:line`) as your map of **where** things changed.
 Do not search the tree to rediscover it. Both are still claims to refute:
 - **re-run** every verification command yourself;
@@ -235,7 +240,7 @@ reported, not fixed>
 ```json
 {
   "schema": "plan-verifier/v1",
-  "plan": "specs/NN-slug.md",
+  "plan": "docs/plans/YYYY-MM-DD-slug.md",
   "state": "working-tree",
   "verdict": "approve",
   "acs": [{ "id": "AC-1", "section": "§8", "status": "met", "kind": "cmd" }],

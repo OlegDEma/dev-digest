@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { StructuredOutputError } from '@devdigest/shared';
 import type {
   LLMProvider,
   ModelInfo,
@@ -129,8 +130,12 @@ export class OpenAIProvider implements LLMProvider {
       messages.push({ role: 'user', content: parsed.repromptMessage });
     }
 
-    throw new ExternalServiceError('OpenAI structured output failed schema validation', {
-      raw: lastRaw,
+    throw new StructuredOutputError({
+      schemaName: req.schemaName,
+      attempts: maxRetries + 1,
+      tokensIn,
+      tokensOut,
+      costUsd: estimateCost(req.model, tokensIn, tokensOut),
     });
   }
 

@@ -7,6 +7,7 @@ export type LinkLike = React.ComponentType<{
   style?: React.CSSProperties;
   children?: React.ReactNode;
   onClick?: () => void;
+  "aria-current"?: "page";
 }>;
 
 export interface RepoSummary {

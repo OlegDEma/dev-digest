@@ -21,6 +21,7 @@ const SKILL: SkillSummary = {
   name: "breaking-change-detector",
   description: "Treat every existing route as having callers you cannot see.",
   type: "rubric",
+  context_docs: [],
   source: "manual",
   body: "# Breaking-change detector",
   enabled: true,
