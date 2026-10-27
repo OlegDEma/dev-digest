@@ -11,7 +11,7 @@ server/package.json dependencies: fastify@5.1.0, drizzle-orm@0.36.0, zod@3.23.8,
 server/package.json devDependencies: vitest@2.1.4, typescript@5.6.3, tsx@4.19.0
 client/package.json dependencies: next@15.0.3, react@19.0.0, react-dom@19.0.0, @tanstack/react-query@5.59.0, zod@3.22.4, date-fns@4.1.0
 client/package.json devDependencies: vitest@2.1.4, typescript@5.6.3, tailwindcss@3.4.14
-reviewer-core/package.json dependencies: zod@3.23.8
+reviewer-core/package.json dependencies: zod@3.24.1
 reviewer-core/package.json devDependencies: typescript@5.6.3
 e2e/package.json dependencies: (none runtime)
 e2e/package.json devDependencies: playwright@1.48.2, typescript@5.6.3
@@ -29,7 +29,7 @@ client/node_modules/zod: 1.9M
 reviewer-core/node_modules/zod: 2.1M
 e2e/node_modules/playwright: 210M
 
-server/package.json also declares zod@3.23.8, client/package.json declares zod@3.22.4, reviewer-core/package.json declares zod@3.23.8 — three different resolved zod versions across packages.
+server/package.json also declares zod@3.23.8, client/package.json declares zod@3.22.4, reviewer-core/package.json declares zod@3.24.1 — three different resolved zod versions across packages.
 
 grep for imports crossing package boundaries:
 - server/src/routes/reviews.ts imports types from "@shared/review-types" (alias to server/src/vendor/shared)
