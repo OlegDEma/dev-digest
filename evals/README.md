@@ -193,7 +193,7 @@ Runs only the suites a PR touches. `scripts/ci-detect.mjs` maps the diff onto su
 | Changed | Runs | Tier / blocking |
 |---|---|---|
 | `.claude/skills/<s>/**` or `evals/skills/<s>/**` | `skills/<s>/` | content, direct to OpenRouter, **blocking** |
-| `.claude/agents/<a>.md` or `evals/agents/<a>/**` | `agents/<a>/` **+ workflow** | tool, LiteLLM proxy, **blocking** |
+| `.claude/agents/<a>.md` or `evals/agents/<a>/**` | `agents/<a>/` **+ workflow** | tool, LiteLLM proxy, **blocking** (a `*-lite` A/B control is non-blocking) |
 | any `CLAUDE.md` / `AGENTS.md`, `.claude/settings.json`, `evals/{src,workflow,proxy}/**`, evals deps, the workflow file | `workflow/` | tool, proxy, **non-blocking** |
 
 - A changed skill/agent with no `evals/<tier>/<name>/*.eval.ts` is **skipped**, not failed: the

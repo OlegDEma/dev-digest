@@ -3,6 +3,7 @@
 #   changes   → evals/scripts/ci-detect.mjs maps the diff onto suites (no LLM, no install)
 #   skills    → matrix, one job per changed skill WITH evals      content tier, direct, blocking
 #   agents    → matrix, one job per changed agent WITH evals      tool tier, LiteLLM proxy, blocking
+#               (except `*-lite` A/B controls — non-blocking)
 #   workflow  → when CLAUDE.md / AGENTS.md / an agent / the engine changed   proxy, NON-blocking
 #
 # A changed skill/agent with no evals/<tier>/<name>/*.eval.ts is skipped with a
@@ -152,11 +153,14 @@ jobs:
           if-no-files-found: ignore
 
   agents:
-    name: agent · ${{ matrix.agent }}
+    name: agent · ${{ matrix.agent }}${{ endsWith(matrix.agent, '-lite') && ' (non-blocking)' || '' }}
     needs: changes
     if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.agents != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # `<name>-lite` is the A/B control of `<name>` (same cases, one hard rule removed), so failing
+    # the removed rule's practice is the signal, not a regression. The strict agent stays blocking.
+    continue-on-error: ${{ endsWith(matrix.agent, '-lite') }}
     strategy:
       fail-fast: false
       # Tool tiers on OpenRouter get rate-limited under load (evals/README.md) — one at a time.
