@@ -199,6 +199,9 @@ Runs only the suites a PR touches. `scripts/ci-detect.mjs` maps the diff onto su
 - A changed skill/agent with no `evals/<tier>/<name>/*.eval.ts` is **skipped**, not failed: the
   `changes` job logs `SKIP skill <name>: …` as a notice. No `OPENROUTER_API_KEY` (fork PR, unset
   secret) skips every model job the same way.
+- "Non-blocking" is a **step-level** `continue-on-error` on the vitest step: the job and its PR
+  check stay green, and a failed eval shows up as a `non-blocking eval failed` warning annotation.
+  Install / proxy failures still turn the job red.
 - Manual run (Actions → evals → Run workflow): `scope=all` runs every suite that has evals.
 - Fixtures shared across suites are not followed: `architecture-reviewer-lite` reuses
   `agents/architecture-reviewer/` cases, so a change there re-runs only the strict agent.

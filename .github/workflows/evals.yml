@@ -158,9 +158,6 @@ jobs:
     if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.agents != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # `<name>-lite` is the A/B control of `<name>` (same cases, one hard rule removed), so failing
-    # the removed rule's practice is the signal, not a regression. The strict agent stays blocking.
-    continue-on-error: ${{ endsWith(matrix.agent, '-lite') }}
     strategy:
       fail-fast: false
       # Tool tiers on OpenRouter get rate-limited under load (evals/README.md) — one at a time.
@@ -187,8 +184,16 @@ jobs:
       - run: docker compose -f proxy/docker-compose.yml up -d
       - run: pnpm proxy:wait
       # Trailing slash keeps "architecture-reviewer" from also matching "architecture-reviewer-lite".
-      - run: ./node_modules/.bin/vitest run "agents/${{ matrix.agent }}/"
-      - if: failure()
+      # `<name>-lite` is the A/B control of `<name>` (same cases, one hard rule removed), so failing
+      # the removed rule's practice is the signal, not a regression: its eval verdict is
+      # non-blocking. Step-level, not job-level — a job-level continue-on-error still shows a red
+      # check on the PR, and infra steps above must still fail the job. Strict agents stay blocking.
+      - id: evals
+        continue-on-error: ${{ endsWith(matrix.agent, '-lite') }}
+        run: ./node_modules/.bin/vitest run "agents/${{ matrix.agent }}/"
+      - if: steps.evals.outcome == 'failure' && steps.evals.conclusion == 'success'
+        run: echo "::warning title=non-blocking eval failed::agents/${{ matrix.agent }} failed (A/B control, non-blocking) — see the vitest step log and the eval-records artifact"
+      - if: failure() || steps.evals.outcome == 'failure'
         run: docker compose -f proxy/docker-compose.yml logs --tail 100
       - if: always()
         run: docker compose -f proxy/docker-compose.yml down
@@ -205,8 +210,6 @@ jobs:
     if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.run_workflow == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # activation cases are "indicative, not blocking" on non-Anthropic models (evals/README.md).
-    continue-on-error: true
     defaults:
       run:
         working-directory: evals
@@ -228,8 +231,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: docker compose -f proxy/docker-compose.yml up -d
       - run: pnpm proxy:wait
-      - run: ./node_modules/.bin/vitest run workflow/
-      - if: failure()
+      # activation cases are "indicative, not blocking" on non-Anthropic models (evals/README.md):
+      # the eval verdict is non-blocking at step level (see the agents job for why not job level).
+      - id: evals
+        continue-on-error: true
+        run: ./node_modules/.bin/vitest run workflow/
+      - if: steps.evals.outcome == 'failure'
+        run: echo "::warning title=non-blocking eval failed::workflow tier failed (non-blocking) — see the vitest step log and the eval-records artifact"
+      - if: failure() || steps.evals.outcome == 'failure'
         run: docker compose -f proxy/docker-compose.yml logs --tail 100
       - if: always()
         run: docker compose -f proxy/docker-compose.yml down
