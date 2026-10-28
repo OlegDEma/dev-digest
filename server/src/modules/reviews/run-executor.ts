@@ -4,11 +4,13 @@ import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
+import type { LinkedSkillRow } from '../agents/repository.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentService } from '../intent/service.js';
+import { resolveProjectContext, type ResolvedProjectContext } from '../project-context/index.js';
 import { emitPromptAssembled, promptLogMode } from '../../platform/prompt-log.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
@@ -205,7 +207,30 @@ export class ReviewRunExecutor {
       // Not best-effort like repo-intel: skills are part of the agent's config,
       // so a load failure fails the run rather than silently reviewing without
       // them. An agent with none gets a prompt byte-identical to today's.
-      const skillBlocks = await this.buildSkillBlocks(agent.id, runId, runLog);
+      // ONE read of the bound skills: it feeds both the skill blocks and the
+      // project-context attach lists, so a mid-run attach edit cannot change
+      // what this run injects (snapshot, AC-23).
+      const linkedSkills = await this.agents.enabledSkillsForPrompt(agent.id);
+      const skillBlocks = await this.buildSkillBlocks(linkedSkills, runId, runLog);
+
+      // Project context — attached .md specs (agent first, then skills), read
+      // fresh from THIS PR's repo clone. Best-effort: a failure here never
+      // changes the run status (NFR-5), the docs are simply not injected.
+      let pc: ResolvedProjectContext;
+      try {
+        pc = await resolveProjectContext({
+          cloneRoot: repo.clonePath,
+          repoFullName: `${repo.owner}/${repo.name}`,
+          agentDocs: agent.contextDocs ?? [],
+          skillDocs: linkedSkills.map((l) => l.skill.contextDocs ?? []),
+          cloneDocs: this.container.cloneDocs,
+          tokenizer: this.container.tokenizer,
+        });
+      } catch (err) {
+        runLog.info(`project context: resolution failed — ${(err as Error).message}`);
+        pc = { docs: [], specsDocs: [], specsRead: [], specsMissing: [], lines: [] };
+      }
+      for (const line of pc.lines) runLog.info(line);
 
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
@@ -233,6 +258,8 @@ export class ReviewRunExecutor {
         // Skills — resolved bodies (the engine never sees ids or slugs); the
         // section is omitted when the list is empty.
         ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
+        // Project context — omitted entirely when nothing was injected (AC-29).
+        ...(pc.docs.length > 0 ? { specs: pc.docs } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -352,7 +379,9 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: pc.specsRead,
+        specs_missing: pc.specsMissing,
+        specs_docs: pc.specsDocs,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -399,8 +428,11 @@ export class ReviewRunExecutor {
    * same list is recorded in `agent_run_skills` (with the version that shaped
    * the prompt) so the Stats tab can attribute this run to each skill.
    */
-  private async buildSkillBlocks(agentId: string, runId: string, runLog: RunLogger): Promise<string[]> {
-    const linked = await this.agents.enabledSkillsForPrompt(agentId);
+  private async buildSkillBlocks(
+    linked: LinkedSkillRow[],
+    runId: string,
+    runLog: RunLogger,
+  ): Promise<string[]> {
     if (linked.length === 0) {
       runLog.info('skills: none bound — the prompt has no "Skills / rules" section');
       return [];
@@ -536,6 +568,8 @@ export class ReviewRunExecutor {
       raw_output: '',
       memory_pulled: [],
       specs_read: [],
+        specs_missing: [],
+        specs_docs: [],
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };
   }

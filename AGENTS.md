@@ -35,6 +35,8 @@ Drizzle ORM + Postgres (pgvector) · Zod · Vitest · agent-browser (e2e)
 | Engine          | `cd reviewer-core && npm test \| npm run typecheck`        |
 | E2E (hermetic)  | `cd e2e && npm run e2e:hermetic`                            |
 | MCP server      | `cd mcp && npm test \| npm run typecheck \| npm start`      |
+| Verify (short)  | `./scripts/verify.sh [--full] [--it] [pkg…]` — tsc + tests, PASS/FAIL only |
+| SDD workflow    | manual `/spec` → manual `implementation-planner` → `/run-plan plan:<path>` |
 
 Flags for `dev.sh`: `--no-seed` · `--no-client` · `--db-only` · `--help`.
 
@@ -109,9 +111,15 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   BOTH `server/src/vendor/shared/` (canonical) and `client/src/vendor/shared/`
   (copy) with no sync script — edit both, identically, in the same change.
   Evidence: root [`INSIGHTS.md`](INSIGHTS.md) → *What Doesn't Work* (2026-07-29).
-- **Specs are `NN-slug.md` (2-digit prefix), written before the code.** Root
-  `specs/` for a feature spanning ≥2 packages; `<pkg>/specs/` for a single-package
-  one. Evidence: `specs/README.md`, `specs/01-run-cost-badge.md`.
+- **Specs are `YYYY-MM-DD-slug.md`, in English, written before the code** by the
+  `spec-creator` agent: `docs/specs/` for a feature spanning ≥2 packages,
+  `<pkg>/specs/` for a single-package one. They hold *what* (EARS ACs, workflow
+  and service-communication diagrams, boundary contracts), never implementation
+  details. Root `specs/01`–`12` is legacy (`NN-slug.md`, spec + plan in one file).
+  Implementation plans are separate: `docs/plans/<same file name>`, written by
+  `implementation-planner` from an approved spec. The planner never writes
+  specs; `spec-creator` never writes plans. Evidence:
+  `.claude/agents/spec-creator.md`, `docs/specs/README.md`, `docs/plans/README.md`.
 - **Commits follow Conventional Commits by example** (`feat(reviews): …`,
   `fix(db): …`, `docs(insights): …`) — matched from history, not enforced by a
   hook; branch names are freeform.

@@ -154,5 +154,17 @@ subagents. No recommendation of what the caller should do.
 - An edge without a `path:line` is not an edge.
 - "Not found" after one `Grep` is not a finding: try both casings, the barrel
   and a distinctive substring first.
+- **Search inputs that waste a turn** (both seen in the 2026-10-11 retro,
+  `docs/retros/2026-10-11-project-context-spec.md`):
+  - `Grep`'s `glob` takes **one** brace level. A nested brace such as
+    `{server/src/**/*.ts,client/src/**/*.{ts,tsx}}` is rejected by ripgrep
+    before it searches. Use a `path` plus a flat glob (`*.{ts,tsx}`), or run
+    one `Grep` per root in the same turn.
+  - Do not `Read` or `Grep` a path you guessed (e.g. a module folder named
+    after the feature). `Glob` it first; a missing path is itself a finding
+    ("no `modules/context` exists").
+- **Start from citations you were given.** If the prompt lists `path:line`
+  already established ("Already cited"), treat them as read: do not re-open
+  those lines, and spend turns only on what lies beyond them.
 - Say plainly what you did not search; a map with hidden gaps is worse than none.
 - Prefer a short table of verified edges to a long list of guesses.

@@ -145,6 +145,19 @@ export class AgentsRepository {
     return row;
   }
 
+  /**
+   * Replace the ordered project-context attach list. Deliberately touches ONLY
+   * `context_docs`: no version bump, no agent_versions snapshot (AC-17).
+   */
+  async setContextDocs(workspaceId: string, id: string, docs: string[]): Promise<AgentRow | undefined> {
+    const [row] = await this.db
+      .update(t.agents)
+      .set({ contextDocs: docs })
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, id)))
+      .returning();
+    return row;
+  }
+
   private async snapshotVersion(row: AgentRow, version: number): Promise<void> {
     const skills = await this.skillIdsForAgent(row.id);
     await this.db

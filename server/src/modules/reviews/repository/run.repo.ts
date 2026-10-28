@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { ActiveRun, RunSummary, RunTrace } from '@devdigest/shared';
+import { RunTrace as RunTraceSchema, type ActiveRun, type RunSummary, type RunTrace } from '@devdigest/shared';
 
 type AgentRunRow = typeof t.agentRuns.$inferSelect;
 
@@ -224,5 +224,13 @@ export async function recordRunSkills(
 
 export async function getRunTrace(db: Db, runId: string): Promise<RunTrace | undefined> {
   const [row] = await db.select().from(t.runTraces).where(eq(t.runTraces.runId, runId));
-  return row ? (row.trace as RunTrace) : undefined;
+  if (!row) return undefined;
+  // Apply the schema so fields added after a trace was stored (`.default([])`,
+  // e.g. specs_missing / specs_docs) are present. A legacy trace that fails
+  // other validation must not 500: fall back to the raw document with the
+  // known additive arrays defaulted.
+  const parsed = RunTraceSchema.safeParse(row.trace);
+  if (parsed.success) return parsed.data;
+  const raw = row.trace as Partial<RunTrace> & Record<string, unknown>;
+  return { ...raw, specs_missing: raw.specs_missing ?? [], specs_docs: raw.specs_docs ?? [] } as RunTrace;
 }

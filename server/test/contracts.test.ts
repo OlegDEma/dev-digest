@@ -13,8 +13,16 @@ import {
   PrHistory,
   SmartDiff,
   Conformance,
-  Onboarding,
+  OnboardingTourResponse,
+  OnboardingTour,
+  OnboardingSkeletonReason,
+  StructuredOutputError,
+  isStructuredOutputError,
   EvalRun,
+  PrBrief,
+  PrBriefResponse,
+  BriefModelOutput,
+  ReviewFocusItem,
   MemoryItem,
   RunTrace,
   Settings,
@@ -163,18 +171,13 @@ describe('AI contracts parse fixtures', () => {
     expect(d.groups[0]!.role).toBe('core');
   });
 
-  it('Conformance / Onboarding / EvalRun / MemoryItem', () => {
+  it('Conformance / EvalRun / MemoryItem', () => {
     expect(() =>
       Conformance.parse({
         spec_id: 's1',
         spec_title: 'Spec',
         items: [{ requirement: 'r', status: 'implemented' }],
         completeness_pct: 80,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      Onboarding.parse({
-        sections: [{ kind: 'architecture', title: 'T', body: 'b', links: [] }],
       }),
     ).not.toThrow();
     expect(() =>
@@ -209,6 +212,8 @@ describe('AI contracts parse fixtures', () => {
       raw_output: '{}',
       memory_pulled: [{ pr: 288, text: 'verified via stripe-signature' }],
       specs_read: ['specs/security-baseline.md'],
+      specs_missing: [],
+      specs_docs: [],
       log: [{ t: '00.00', kind: 'info', msg: 'started' }],
     });
     expect(trace.tool_calls).toHaveLength(1);
@@ -252,5 +257,189 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+});
+
+describe('Onboarding tour contract', () => {
+  const index = {
+    status: 'full' as const,
+    files_indexed: 5,
+    source_files_total: null,
+    files_bounded: null,
+    files_skipped: 0,
+    last_indexed_sha: 'abc',
+    hotness_available: false,
+    clone_available: true,
+  };
+  const base = {
+    title: 'T',
+    provenance: 'from_index' as const,
+    available: true,
+    unavailable_reason: null,
+    body_markdown: null,
+    diagram: null,
+  };
+  const sections = () => [
+    { kind: 'architecture_overview', ...base, items: [] },
+    { kind: 'critical_paths', ...base, items: [] },
+    { kind: 'run_locally', ...base, items: [] },
+    { kind: 'reading_path', ...base, items: [] },
+    {
+      kind: 'first_tasks',
+      ...base,
+      available: false,
+      unavailable_reason: 'Too few tasks',
+      items: [],
+    },
+  ];
+  const tour = (over: Record<string, unknown> = {}) => ({
+    generated_at: '2026-10-11T00:00:00.000Z',
+    mode: 'narrative',
+    skeleton_reason: null,
+    completeness: 'full',
+    partial_reasons: [],
+    index,
+    llm: {
+      calls: 1,
+      call_id: 'c1',
+      attempts: 1,
+      provider: 'openai',
+      model: 'm',
+      tokens_in: 1,
+      tokens_out: 1,
+      cost_usd: null,
+    },
+    dropped_ai_items: 0,
+    skipped_files: [],
+    sections: sections(),
+    ...over,
+  });
+
+  it('parses a response with no tour', () => {
+    expect(() =>
+      OnboardingTourResponse.parse({
+        repo_id: 'r',
+        repo_full_name: 'o/n',
+        tour: null,
+        current_index: index,
+        generation_in_progress: false,
+        last_failure: null,
+      }),
+    ).not.toThrow();
+  });
+
+  it('parses a narrative tour whose first_tasks section is unavailable with no items (AC-77)', () => {
+    const t = OnboardingTour.parse(tour());
+    const ft = t.sections[4]!;
+    expect(ft.kind).toBe('first_tasks');
+    expect(ft.available).toBe(false);
+    expect(ft.items).toEqual([]);
+    expect(() =>
+      OnboardingTourResponse.parse({
+        repo_id: 'r',
+        repo_full_name: 'o/n',
+        tour: tour(),
+        current_index: index,
+        generation_in_progress: false,
+        last_failure: {
+          at: '2026-10-11T00:00:00.000Z',
+          reason: 'llm_timeout',
+          provider: 'openai',
+          attempts: null,
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects skeleton_reason inconsistent with mode, wrong section order and bad enums', () => {
+    expect(OnboardingTour.safeParse(tour({ skeleton_reason: 'no_clone' })).success).toBe(false);
+    expect(OnboardingTour.safeParse(tour({ mode: 'skeleton' })).success).toBe(false);
+    expect(
+      OnboardingTour.safeParse(
+        tour({ mode: 'skeleton', skeleton_reason: 'no_clone' }),
+      ).success,
+    ).toBe(true);
+    const swapped = sections();
+    [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+    expect(OnboardingTour.safeParse(tour({ sections: swapped })).success).toBe(false);
+    expect(OnboardingTour.safeParse(tour({ sections: sections().slice(0, 4) })).success).toBe(false);
+    expect(OnboardingSkeletonReason.safeParse('NO_CLONE').success).toBe(false);
+    expect(
+      OnboardingTour.safeParse(tour({ llm: { ...(tour().llm), calls: 2 } })).success,
+    ).toBe(false);
+  });
+
+  it('StructuredOutputError is recognised by name and carries accounting', () => {
+    const e = new StructuredOutputError({
+      schemaName: 'S',
+      attempts: 3,
+      tokensIn: 10,
+      tokensOut: 5,
+      costUsd: null,
+    });
+    expect(isStructuredOutputError(e)).toBe(true);
+    expect(isStructuredOutputError(new Error('x'))).toBe(false);
+    expect(e.statusCode).toBe(502);
+    expect(e.attempts).toBe(3);
+  });
+});
+
+describe('brief contracts', () => {
+  const brief = () => ({
+    intent: null,
+    blast: null,
+    risks: {
+      risks: [
+        { kind: 'secret', title: 'Hard-coded key', explanation: 'x', severity: 'high', file_refs: ['src/config.ts:3-5'] },
+      ],
+    },
+    history: null,
+    summary: 'Adds config.',
+    review_focus: [
+      { file: 'src/config.ts', line: 3, reason: 'secret', source: 'pr_diff', line_corrected: false },
+    ],
+    head_sha: 'abc1234',
+    generated_at: '2026-10-12T00:00:00.000Z',
+    provider: 'openai',
+    model: 'gpt-x',
+    calls: 1,
+    attempts: 1,
+    input_tokens: 900,
+    input_budget: 8000,
+    tokens_in: 900,
+    tokens_out: 200,
+    cost_usd: null,
+    missing_inputs: [{ input: 'smart_diff', reason: 'Smart Diff roles are not available' }],
+    specs: [{ path: 'docs/a.md', status: 'skipped', reason: 'over_budget', tokens: null }],
+    reductions: [],
+    dropped: { risks: 0, risk_refs: 0, review_focus: 0 },
+    corrected_lines: 0,
+  });
+
+  it('parses a valid PrBrief and PrBriefResponse', () => {
+    expect(PrBrief.parse(brief()).review_focus).toHaveLength(1);
+    expect(PrBriefResponse.parse({ brief: null, stale: false }).stale).toBe(false);
+    expect(PrBriefResponse.parse({ brief: brief(), stale: true }).brief?.model).toBe('gpt-x');
+  });
+
+  it('rejects wrong-case enums', () => {
+    const b = brief();
+    b.risks.risks[0].severity = 'HIGH';
+    expect(PrBrief.safeParse(b).success).toBe(false);
+    const c = brief();
+    c.review_focus[0].source = 'PR_DIFF';
+    expect(PrBrief.safeParse(c).success).toBe(false);
+  });
+
+  it('rejects ReviewFocusItem.line < 1 but the model-facing item allows it', () => {
+    const item = { file: 'a.ts', line: 0, reason: 'r', source: 'pr_diff', line_corrected: false };
+    expect(ReviewFocusItem.safeParse(item).success).toBe(false);
+    expect(
+      BriefModelOutput.safeParse({ summary: 's', risks: [], review_focus: [{ file: 'a.ts', line: 0, reason: 'r' }] }).success,
+    ).toBe(true);
+  });
+
+  it('rejects BriefModelOutput missing review_focus', () => {
+    expect(BriefModelOutput.safeParse({ summary: 's', risks: [] }).success).toBe(false);
   });
 });

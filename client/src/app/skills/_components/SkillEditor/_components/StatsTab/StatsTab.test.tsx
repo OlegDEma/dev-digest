@@ -24,6 +24,7 @@ const SKILL: Skill = {
   enabled: true,
   version: 5,
   evidence_files: null,
+  context_docs: [],
 };
 
 function renderTab() {

@@ -9,6 +9,7 @@ import type {
   SkillVersion,
 } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
+import { validateContextDocs } from '../_shared/doc-path.js';
 import { EMPTY_METRICS, buildImportPreview, ratesFor, toSkillDto, toSkillVersionDto } from './helpers.js';
 
 /**
@@ -110,6 +111,13 @@ export class SkillsService {
       ...(input.evidence_files !== undefined ? { evidenceFiles: input.evidence_files } : {}),
     });
     return toSkillDto(row);
+  }
+
+  /** Replace the skill's attached project-context paths (whole ordered list). */
+  async setContextDocs(workspaceId: string, id: string, docs: string[]): Promise<Skill | undefined> {
+    const valid = validateContextDocs(docs);
+    const row = await this.repo.setContextDocs(workspaceId, id, valid);
+    return row ? toSkillDto(row) : undefined;
   }
 
   async update(workspaceId: string, id: string, patch: UpdateSkillInput): Promise<Skill | undefined> {

@@ -1,0 +1,16 @@
+{
+  "skill": "pr-self-review",
+  "version": "1.0.0",
+  "base": "main",
+  "head": "302209f8c4e7700bd46da543d8712d3d3bf09088",
+  "worktree": "06dbae5c058afa7a056bd191355b22d869848dd41254ecfc9e13c4f57bc50039",
+  "mode": "report-only",
+  "verdict": "warn",
+  "counts": {
+    "critical": 0,
+    "warning": 16,
+    "suggestion": 29
+  },
+  "waivers": [],
+  "generated_at": "2026-10-12T12:12:41.479Z"
+}

@@ -29,7 +29,7 @@ export const SKILL_TYPE_VALUES: readonly SkillType[] = ["rubric", "convention", 
 export const DEFAULT_NEW_TYPE: SkillType = "custom";
 
 /** Editor tab keys, in tab-bar order (Evals + Versions are placeholders for now). */
-export const EDITOR_TABS = ["config", "preview", "evals", "stats", "versions"] as const;
+export const EDITOR_TABS = ["config", "preview", "context", "evals", "stats", "versions"] as const;
 export type EditorTabKey = (typeof EDITOR_TABS)[number];
 export const DEFAULT_TAB: EditorTabKey = "config";
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Conformance, Onboarding, Eval, Memory, Conventions, Skills,
+ * Conformance, Eval, Memory, Conventions, Skills,
  * Agents and their DTOs.
  */
 
@@ -24,27 +24,6 @@ export const Conformance = z.object({
   completeness_pct: z.number().min(0).max(100),
 });
 export type Conformance = z.infer<typeof Conformance>;
-
-// ---- Onboarding ----
-export const OnboardingLink = z.object({
-  label: z.string(),
-  path: z.string(),
-});
-export type OnboardingLink = z.infer<typeof OnboardingLink>;
-
-export const OnboardingSection = z.object({
-  kind: z.string(),
-  title: z.string(),
-  body: z.string(), // markdown
-  diagram: z.string().nullish(), // mermaid
-  links: z.array(OnboardingLink),
-});
-export type OnboardingSection = z.infer<typeof OnboardingSection>;
-
-export const Onboarding = z.object({
-  sections: z.array(OnboardingSection),
-});
-export type Onboarding = z.infer<typeof Onboarding>;
 
 // ---- Eval ----
 export const EvalPerTrace = z.object({
@@ -128,6 +107,8 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Workspace-wide repo-relative .md paths injected as project context (ordered). */
+  context_docs: z.array(z.string()).default([]),
 });
 export type Skill = z.infer<typeof Skill>;
 
@@ -308,6 +289,8 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  /** Workspace-wide repo-relative .md paths injected as project context (ordered). */
+  context_docs: z.array(z.string()).default([]),
   // Number of skills bound to this agent (`agent_skills` rows). Decorated on the
   // list endpoint only — single-agent reads and mutations omit it.
   skill_count: z.number().int().optional(),

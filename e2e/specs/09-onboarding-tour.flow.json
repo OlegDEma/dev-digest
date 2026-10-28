@@ -1,0 +1,14 @@
+{
+  "name": "Generate an onboarding tour skeleton for a repository without a clone",
+  "description": "From the seeded repo's PR list, open Onboarding Tour from the sidebar, click 'Generate onboarding tour' and confirm the skeleton banner shows 'Clone not available.' with '0 LLM calls'. This is the one flow that writes: it stores one skeleton row in the hermetic DB and makes no LLM call, because the seeded demo repo acme/payments-api has clonePath: null (server/src/db/seed.ts). Assumes a freshly-seeded DB where the demo repo is the first repo — guaranteed by the e2e-web.yml workflow's fresh seed; run locally against a clean DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Onboarding Tour", "click"], "label": "open Onboarding Tour from the sidebar" },
+    { "cmd": ["wait", "--url", "/onboarding"], "label": "navigate to the repo onboarding route" },
+    { "cmd": ["wait", "--text", "Generate onboarding tour"], "label": "empty state with the generate CTA renders" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Generate onboarding tour"], "label": "generate the tour" },
+    { "cmd": ["wait", "--text", "Clone not available."], "label": "skeleton banner names the missing clone" },
+    { "cmd": ["wait", "--text", "0 LLM calls"], "label": "no LLM call was made" }
+  ]
+}

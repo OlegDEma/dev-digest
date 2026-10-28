@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -45,10 +46,10 @@ const record: PrIntentRecord = {
   computed_at: "2026-09-30T00:00:00Z",
 };
 
-function renderCard() {
+function renderCard(riskAreas?: React.ReactNode) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ brief: messages }}>
-      <IntentCard prId="p1" pollWhileRunning={false} />
+      <IntentCard prId="p1" pollWhileRunning={false} riskAreas={riskAreas} />
     </NextIntlClientProvider>,
   );
 }
@@ -106,5 +107,26 @@ describe("IntentCard", () => {
       expect(title.closest("section")!.firstElementChild).toContainElement(title);
       cleanup();
     }
+  });
+
+  it("AC-43: riskAreas replaces the intent chips when a brief exists", () => {
+    state.query = { data: { intent: record, stale: false }, isLoading: false, isError: false };
+    renderCard(<div>brief risks</div>);
+    expect(screen.getByText("brief risks")).toBeInTheDocument();
+    expect(screen.queryByText("Public endpoints")).not.toBeInTheDocument();
+  });
+
+  it("AC-43: riskAreas is shown even when there is no intent", () => {
+    state.query = { data: { intent: null, stale: false }, isLoading: false, isError: false };
+    renderCard(<div>brief risks</div>);
+    expect(screen.getByText("No intent yet")).toBeInTheDocument();
+    expect(screen.getByText("brief risks")).toBeInTheDocument();
+  });
+
+  it("AC-44: without riskAreas the intent list is unchanged", () => {
+    state.query = { data: { intent: record, stale: false }, isLoading: false, isError: false };
+    renderCard();
+    expect(screen.getByText("Public endpoints")).toBeInTheDocument();
+    expect(screen.getByText("RISK AREAS")).toBeInTheDocument();
   });
 });

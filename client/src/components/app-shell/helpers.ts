@@ -22,11 +22,14 @@ export function isTextInput(el: EventTarget | null): boolean {
   );
 }
 
+/** The per-repo tour page only; bare `/onboarding` is the Add repository page. */
+const TOUR_ROUTE = /^\/repos\/[^/]+\/onboarding(\/|$)/;
+
 /** Derive the active sidebar key from the current pathname. */
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  if (TOUR_ROUTE.test(pathname)) return "onboarding-tour";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
   if (pathname.includes("/pulls")) return "pulls";
@@ -37,4 +40,9 @@ export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/agent-performance")) return "agent-performance";
   if (pathname.startsWith("/ci-runs")) return "ci-runs";
   return "";
+}
+
+/** Where picking a repo in the switcher lands: the tour page stays on the tour. */
+export function repoSwitchTarget(pathname: string, id: string): string {
+  return TOUR_ROUTE.test(pathname) ? `/repos/${id}/onboarding` : `/repos/${id}/pulls`;
 }

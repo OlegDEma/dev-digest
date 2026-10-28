@@ -34,7 +34,8 @@
       "memoryPulled": "Memory pulled",
       "specsRead": "Specs read",
       "items": "{count, plural, one {# item} other {# items}}",
-      "none": "none"
+      "none": "none",
+      "specsSkipped": "Specs skipped"
     },
     "stat": {
       "duration": "DURATION",
@@ -47,7 +48,7 @@
       "skills": "Skills (dynamic)",
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
-      "specs": "Project context (dynamic)",
+      "specs": "Project context — attached specs (untrusted)",
       "callers": "Callers of changed symbols — repo-intel (dynamic)",
       "intent": "PR intent — derived (dynamic)",
       "user": "User / diff (dynamic)",
@@ -55,12 +56,22 @@
       "fullscreen": "Open fullscreen",
       "search": "Search in this block…",
       "noMatches": "No matches for “{q}”.",
-      "tokens": "~{count} tokens"
+      "tokens": "~{count} tokens",
+      "specsInjected": "{count, plural, one {# document injected} other {# documents injected}}",
+      "specsSkipped": "Skipped documents",
+      "itemSearch": "Search in this document…"
     },
     "tools": {
       "args": "args",
       "result": "result",
       "previewTruncated": "(preview truncated)"
+    },
+    "skippedReason": {
+      "not_found": "not found",
+      "too_large": "too large",
+      "unreadable": "unreadable",
+      "outside_repo": "outside the repository",
+      "no_clone": "no clone"
     }
   },
   "drawer": {

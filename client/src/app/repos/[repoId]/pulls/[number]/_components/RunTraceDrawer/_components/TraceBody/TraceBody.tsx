@@ -13,12 +13,16 @@ import { s } from "../../styles";
 import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
 import { PromptBlock } from "../PromptBlock";
+import { ProjectContextBlock } from "../ProjectContextBlock";
 import { FindingsSection } from "../FindingsSection";
 import { Row, Stat } from "../atoms";
 
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
+  // Traces stored before project context have neither key (the client does not parse).
+  const specsMissing = trace.specs_missing ?? [];
+  const specsDocs = trace.specs_docs ?? [];
   return (
     <>
       <TraceSection icon="Settings" title={t("trace.configuration")}>
@@ -42,6 +46,19 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
                 <span style={s.specsNone}>{t("trace.config.none")}</span>
               ) : (
                 trace.specs_read.map((sp, i) => (
+                  <span key={i} className="mono" style={s.spec}>
+                    {sp}
+                  </span>
+                ))
+              )}
+            </div>
+          </Row>
+          <Row label={t("trace.config.specsSkipped")}>
+            <div style={s.specsWrap}>
+              {specsMissing.length === 0 ? (
+                <span style={s.specsNone}>{t("trace.config.none")}</span>
+              ) : (
+                specsMissing.map((sp, i) => (
                   <span key={i} className="mono" style={s.spec}>
                     {sp}
                   </span>
@@ -82,8 +99,12 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         {trace.prompt_assembly.repo_map != null && (
           <PromptBlock label={t("trace.prompt.repoMap")} text={trace.prompt_assembly.repo_map} color={PROMPT_COLORS.repoMap} />
         )}
-        {trace.prompt_assembly.specs != null && (
-          <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+        {specsDocs.length > 0 ? (
+          <ProjectContextBlock docs={specsDocs} />
+        ) : (
+          trace.prompt_assembly.specs != null && (
+            <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+          )
         )}
         {trace.prompt_assembly.callers != null && (
           <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} />

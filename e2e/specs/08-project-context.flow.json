@@ -1,0 +1,11 @@
+{
+  "name": "Open Project Context for a repository without a clone",
+  "description": "From the seeded repo's PR list, open Project Context from the sidebar and confirm the page shows the 'Clone not available' state. The seeded demo repo acme/payments-api has clonePath: null (server/src/db/seed.ts), so discovery answers clone_available: false instead of an error. Assumes a freshly-seeded DB where the demo repo is the first repo — guaranteed by the e2e-web.yml workflow's fresh seed; run locally against a clean DB (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Project Context", "click"], "label": "open Project Context from the sidebar" },
+    { "cmd": ["wait", "--url", "/context"], "label": "navigate to the Project Context route" },
+    { "cmd": ["wait", "--text", "Clone not available"], "label": "clone-not-available state renders" }
+  ]
+}

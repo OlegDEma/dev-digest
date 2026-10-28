@@ -182,11 +182,110 @@ export const SmartDiff = z.object({
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
+// ---- PR Why + Risk Brief (model output, stored brief, route response) ----
+/** What the model returns. `line` has no `.min` so the strict JSON schema carries no `minimum`; validation snaps it. */
+export const BriefModelFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int(),
+  reason: z.string(),
+});
+export type BriefModelFocusItem = z.infer<typeof BriefModelFocusItem>;
+
+export const BriefModelOutput = z.object({
+  summary: z.string(),
+  risks: z.array(Risk),
+  review_focus: z.array(BriefModelFocusItem),
+});
+export type BriefModelOutput = z.infer<typeof BriefModelOutput>;
+
+export const BriefFocusSource = z.enum(['pr_diff', 'blast_map']);
+export type BriefFocusSource = z.infer<typeof BriefFocusSource>;
+
+export const ReviewFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int().min(1),
+  reason: z.string(),
+  source: BriefFocusSource,
+  line_corrected: z.boolean(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+export const BriefMissingInputKind = z.enum([
+  'intent',
+  'blast',
+  'diff_stats',
+  'hunk_ranges',
+  'pr_body',
+  'linked_issue',
+  'specs',
+  'smart_diff',
+]);
+export type BriefMissingInputKind = z.infer<typeof BriefMissingInputKind>;
+
+export const BriefMissingInput = z.object({
+  input: BriefMissingInputKind,
+  reason: z.string(),
+});
+export type BriefMissingInput = z.infer<typeof BriefMissingInput>;
+
+export const BriefSpecStatus = z.enum(['used', 'skipped']);
+export type BriefSpecStatus = z.infer<typeof BriefSpecStatus>;
+
+export const BriefSpecSkipReason = z.enum([
+  'not_found',
+  'too_large',
+  'unreadable',
+  'outside_repo',
+  'no_clone',
+  'over_budget',
+]);
+export type BriefSpecSkipReason = z.infer<typeof BriefSpecSkipReason>;
+
+export const BriefSpecEntry = z.object({
+  path: z.string(),
+  status: BriefSpecStatus,
+  reason: BriefSpecSkipReason.nullable(),
+  tokens: z.number().int().nullable(),
+});
+export type BriefSpecEntry = z.infer<typeof BriefSpecEntry>;
+
+export const BriefDropped = z.object({
+  risks: z.number().int(),
+  risk_refs: z.number().int(),
+  review_focus: z.number().int(),
+});
+export type BriefDropped = z.infer<typeof BriefDropped>;
+
 // ---- Composed PR Brief (pr_brief.json) ----
 export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
+  intent: Intent.nullable(),
+  blast: BlastRadius.nullable(),
   risks: Risks,
-  history: PrHistory,
+  history: PrHistory.nullable(),
+  summary: z.string(),
+  review_focus: z.array(ReviewFocusItem),
+  head_sha: z.string(),
+  generated_at: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  calls: z.number().int(),
+  attempts: z.number().int().min(1),
+  input_tokens: z.number().int(),
+  input_budget: z.number().int(),
+  tokens_in: z.number().int(),
+  tokens_out: z.number().int(),
+  cost_usd: z.number().nullable(),
+  missing_inputs: z.array(BriefMissingInput),
+  specs: z.array(BriefSpecEntry),
+  reductions: z.array(z.string()),
+  dropped: BriefDropped,
+  corrected_lines: z.number().int(),
 });
 export type PrBrief = z.infer<typeof PrBrief>;
+
+/** GET/POST /pulls/:id/brief. `stale` = stored head_sha differs from the PR head. */
+export const PrBriefResponse = z.object({
+  brief: PrBrief.nullable(),
+  stale: z.boolean(),
+});
+export type PrBriefResponse = z.infer<typeof PrBriefResponse>;

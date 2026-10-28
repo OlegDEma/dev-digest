@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { StructuredOutputError } from '@devdigest/shared';
 import type {
   LLMProvider,
   ModelInfo,
@@ -144,8 +145,12 @@ export class AnthropicProvider implements LLMProvider {
       });
     }
 
-    throw new ExternalServiceError('Anthropic structured output failed schema validation', {
-      raw: lastRaw,
+    throw new StructuredOutputError({
+      schemaName: req.schemaName,
+      attempts: maxRetries + 1,
+      tokensIn,
+      tokensOut,
+      costUsd: estimateCost(req.model, tokensIn, tokensOut),
     });
   }
 

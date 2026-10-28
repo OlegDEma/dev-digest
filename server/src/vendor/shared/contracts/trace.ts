@@ -71,6 +71,17 @@ export const RunStats = z.object({
 });
 export type RunStats = z.infer<typeof RunStats>;
 
+/** One attached project-context doc as resolved for a run (injected or skipped). */
+export const ProjectContextDoc = z.object({
+  path: z.string(),
+  repo: z.string(),
+  status: z.enum(['injected', 'skipped']),
+  reason: z.enum(['not_found', 'too_large', 'unreadable', 'outside_repo', 'no_clone']).nullable(),
+  estimated_tokens: z.number().int().nonnegative().nullable(),
+  wrapped_text: z.string().nullable(),
+});
+export type ProjectContextDoc = z.infer<typeof ProjectContextDoc>;
+
 /** The single-document trace stored in `run_traces.trace`. */
 export const RunTrace = z.object({
   config: z.object({
@@ -87,6 +98,8 @@ export const RunTrace = z.object({
   raw_output: z.string(),
   memory_pulled: z.array(MemoryPulled),
   specs_read: z.array(z.string()),
+  specs_missing: z.array(z.string()).default([]),
+  specs_docs: z.array(ProjectContextDoc).default([]),
   log: z.array(RunLogLine),
 });
 export type RunTrace = z.infer<typeof RunTrace>;

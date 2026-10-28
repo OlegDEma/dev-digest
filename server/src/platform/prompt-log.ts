@@ -13,7 +13,7 @@ export type { PromptLogMode } from './config.js';
 /** Per-boot key: fingerprints are comparable within one process only. Never exported/logged/persisted. */
 const FP_KEY = randomBytes(32);
 
-type Feature = 'review' | 'intent' | 'conventions';
+type Feature = 'review' | 'intent' | 'brief' | 'conventions' | 'onboarding';
 type Origin =
   | 'agent_config' | 'app' | 'skill' | 'memory' | 'spec' | 'pr_title' | 'pr_body' | 'issue'
   | 'repo_doc' | 'url' | 'unresolved_refs' | 'derived' | 'repo_code' | 'diff' | 'file_list'
@@ -54,9 +54,23 @@ export const SECTION_REGISTRY: Record<Feature, Record<string, RegistryEntry>> = 
     unresolved: usr('unresolved_refs'),
     file_list: usr('file_list'),
   },
+  brief: {
+    system: sys('app'),
+    title: usr('pr_title'),
+    body: usr('pr_body'),
+    issue: usr('issue'),
+    intent: usr('derived'),
+    blast: usr('repo_code'),
+    files: usr('file_list'),
+    specs: usr('spec'),
+  },
   conventions: {
     system: sys('app'),
     repo_sample: usr('repo_code'),
+  },
+  onboarding: {
+    system: sys('app'),
+    facts: usr('repo_code'),
   },
 };
 
@@ -94,6 +108,8 @@ export interface PromptLogCall {
   agent?: string;
   sessionId?: string;
   chunk?: { index: number; count: number; path?: string };
+  /** Caller-minted id so another record (e.g. onboarding.generated) can share it. */
+  callId?: string;
 }
 
 export interface PromptSectionRecord {
@@ -201,7 +217,7 @@ export function emitPromptAssembled(
 ): string | null {
   if (!logger || mode === 'off') return null;
   try {
-    const callId = randomUUID();
+    const callId = call.callId ?? randomUUID();
     logger.info(buildPromptRecord(call, mode, tokenizer, callId), 'prompt.assembled');
     return callId;
   } catch (e) {
