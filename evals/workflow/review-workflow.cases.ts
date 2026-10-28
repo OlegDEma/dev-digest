@@ -27,13 +27,16 @@ export const cases: WorkflowCase[] = [
     // "node_modules/.bin/tsc" in the root AGENTS.md reached through the CLAUDE.md @import — neither
     // is in source code. A model can still find them by reading the docs, so this proves the fact
     // reached the answer, not strictly that it was auto-loaded. Runs to its natural end (no early
-    // stop) so the trap gets a real chance to fire.
+    // stop) so the trap gets a real chance to fire. Point (2) names client/package.json on purpose:
+    // a nested AGENTS.md loads only once the session opens a file in that subtree, and a model
+    // that only Greps never does (CI 2026-10-28: Grep-only run, generic "Module not found").
     name: "grep traps stay untouched, and facts from the nested + root AGENTS.md reach the answer",
     prompt:
       "Я збираюся одночасно змінювати три пакети: server (новий модуль), client (нова сторінка) і " +
       "reviewer-core (grounding). Перш ніж братися за код: 1) знайди, у якому файлі кожного з трьох " +
-      "пакетів визначено або вперше використовується схема Review; 2) скажи, яку помилку про відсутній " +
-      "модуль я отримаю в client, якщо запущу next build при працюючому dev-сервері; 3) скажи, чим " +
+      "пакетів визначено або вперше використовується схема Review; 2) відкрий client/package.json і скажи, " +
+      "яку саме помилку про відсутній модуль (з іменем файлу) я отримаю в client, якщо запущу next build " +
+      "при працюючому dev-сервері; 3) скажи, чим " +
       "запускати typecheck у server, якщо pnpm typecheck падає ще до роботи. Відповідай коротко, " +
       "нічого не змінюй.",
     forbidFilesRead: ["server/clones/", ".claude/worktrees/"],
@@ -44,12 +47,15 @@ export const cases: WorkflowCase[] = [
   // --- trace (1 session): root "Read when" rows + subagent dispatch -----------------------------
   {
     kind: "trace",
-    // Endpoint must NOT already exist, or the model reviews existing code inline instead of
-    // planning-then-dispatching. GET /repos/:id/index-status is absent from server/src.
+    // Endpoint must NOT already exist — nor have a near-twin in the docs: `index-status` was one
+    // word from the documented `GET /repos/:id/index-state`, so the model stopped to ask "same
+    // endpoint?" instead of dispatching (CI 2026-10-28). `symbol-stats` has no twin in server/src
+    // or the repo-intel README.
     name: "tests + indexing task reads TESTING.md and the repo-intel README, then pulls architecture-reviewer",
     prompt:
-      "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /repos/:id/index-status та інтеграційний " +
-      "тест для індексації repo-intel. Спершу прочитай ті документи, які " +
+      "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /repos/:id/symbol-stats (кількість " +
+      "проіндексованих символів за мовою) та інтеграційний тест для індексації repo-intel. Такого чи " +
+      "схожого ендпоінта ще немає — нічого не уточнюй. Спершу прочитай ті документи, які " +
       "настанови server/AGENTS.md радять для тестів і для індексації, ДО будь-якого коду. Потім ОБОВʼЯЗКОВО запусти сабагента architecture-reviewer, щоб він оцінив мій " +
       "план на відповідність onion-шарам — не рецензуй сам.",
     expectFilesRead: ["TESTING.md", "server/src/modules/repo-intel/README.md"],
