@@ -25,10 +25,14 @@ from the real repo. The answer key is [`expected-findings.json`](expected-findin
 >   від LLM. `reviewer-core` — це окремий пакет-рушій рев'ю, сервер споживає його;
 > - `reviews/hooks.ts` — хук, який викликається, коли рев'ю завершилось;
 > - `reviews/rerun.ts` — ручний перезапуск рев'ю для PR;
-> - `reviews/with-timeout.ts` — утиліта таймауту для промісів.
+> - `reviews/with-timeout.ts` — утиліта таймауту для промісів;
+> - `reviews/index.ts` — публічний вхід модуля reviews;
+> - `notifications/run-summary.ts` — підсумок ранів по PR для тексту коментаря;
+> - `digests/staleness.ts` — пропуск дайджесту, якщо індекс репо застарів;
+> - `notifications/defaults.ts` — значення за замовчуванням для нового правила.
 >
-> Усе інше (`platform/`, `contracts/`, `adapters/`, `db/`, `shared/`, решта
-> `reviews/`) — уже існуючий код проєкту, він тут для контексту, його не рев'юїмо.
+> Усе інше (`platform/`, `contracts/`, `adapters/`, `db/`, `shared/`, `repo-intel/`,
+> `settings/`, решта `reviews/`) — уже існуючий код проєкту, він тут для контексту, його не рев'юїмо.
 >
 > Зроби рев'ю структури нового коду перед мерджем: чи все лежить у правильному
 > місці, що завадить нам згодом. Для кожної проблеми — `file:line` (шлях відносно
@@ -43,18 +47,21 @@ and describes the same problem (a grader model confirms the description; the
 file/line match is deterministic).
 
 - **Recall** = matched `required` findings / all `required` findings.
-- **Precision check** — claims about `must_not_flag` files are false positives,
-  split by `false_positive_levels`:
-  - **blocking** — says the file breaks a layering/architecture rule or must be
-    restructured, at blocker or should-fix level;
-  - **nit** — a nit-level placement/style suggestion that does not claim a
-    rule is broken;
-  - not counted — context mentions, "this is fine", correctness notes unrelated
-    to layering.
+- **Precision check** — each `must_not_flag` entry lists `forbidden_claims`
+  (what would be wrong to say about that file) and `allowed` opinions. Only a
+  statement asserting a forbidden claim is a false positive, split by
+  `false_positive_levels`:
+  - **blocking** — the forbidden claim at blocker or should-fix level;
+  - **nit** — the forbidden claim at nit level or hedged as a suggestion;
+  - not counted — allowed opinions (e.g. "could be a method of the service"),
+    context mentions, "this is fine", correctness notes.
 - **Severity floor**: each required finding has a `min_severity`
   (`blocker` > `should-fix` > `nit`). Map the review's label to that scale with
   `severity_scale` (English and Ukrainian labels; a review's own legend wins);
   the floor is met when the given level is at least the minimum. Score = findings meeting the floor / required findings found.
+  In `grading.json` also emit one `[<id>] severity >= <floor>` expectation per
+  required finding, so a severity miss moves the benchmark pass rate instead of
+  hiding behind the aggregate threshold.
 - `optional` findings count as a bonus, never against the run.
 - A run **passes** when recall ≥ `pass.min_recall`, blocking false positives ≤
   `pass.max_blocking_false_positives`, nit false positives ≤

@@ -6,7 +6,10 @@
  *
  *   .claude/skills/<name>/**   OR  evals/skills/<name>/**   → run evals/skills/<name>  (content tier)
  *   .claude/agents/<name>.md   OR  evals/agents/<name>/**   → run evals/agents/<name>  (tool tier)
- *   CLAUDE.md / .claude/CLAUDE.md / any agent / engine change → run the workflow tier
+ *   CLAUDE.md / AGENTS.md (root or per-package) / .claude/settings.json / any agent /
+ *   engine, deps or proxy change                         → run the workflow tier
+ *
+ * EVAL_SCOPE=all (manual workflow_dispatch) ignores the diff and runs every suite that has evals.
  *
  * A changed artifact with NO written evals is NOT a failure: it is reported on the `skipped_*`
  * outputs so the job can print a visible "SKIP <name> (no evals)" line instead of going red.
@@ -21,6 +24,8 @@ import { fileURLToPath } from "node:url";
 
 const EVALS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = join(EVALS_DIR, "..");
+
+const SCOPE_ALL = process.env.EVAL_SCOPE === "all";
 
 const changed = (process.env.CHANGED_FILES ?? "")
   .split("\n")
@@ -44,14 +49,22 @@ function touched(reClaude, reEvals) {
   return [...names].sort();
 }
 
-const skillNames = touched(
-  /^\.claude\/skills\/([^/]+)\//,
-  /^evals\/skills\/([^/]+)\//,
-);
-const agentNames = touched(
-  /^\.claude\/agents\/([^/]+)\.md$/,
-  /^evals\/agents\/([^/]+)\//,
-);
+/** Every evals/<tier>/<name>/ directory — the scope=all universe. */
+function allSuites(tier) {
+  const dir = join(EVALS_DIR, tier);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+}
+
+const skillNames = SCOPE_ALL
+  ? allSuites("skills")
+  : touched(/^\.claude\/skills\/([^/]+)\//, /^evals\/skills\/([^/]+)\//);
+const agentNames = SCOPE_ALL
+  ? allSuites("agents")
+  : touched(/^\.claude\/agents\/([^/]+)\.md$/, /^evals\/agents\/([^/]+)\//);
 
 const skills = skillNames.filter((n) => hasEvals("skills", n));
 const skippedSkills = skillNames.filter((n) => !hasEvals("skills", n));
@@ -59,15 +72,20 @@ const agents = agentNames.filter((n) => hasEvals("agents", n));
 const skippedAgents = agentNames.filter((n) => !hasEvals("agents", n));
 
 // The workflow tier measures the LIVE harness, so anything that changes it re-triggers it:
-// the root or .claude CLAUDE.md, any agent definition, the workflow cases, or the engine itself.
-const runWorkflow = changed.some(
-  (f) =>
-    f === "CLAUDE.md" ||
-    f === ".claude/CLAUDE.md" ||
-    /^\.claude\/agents\/.+\.md$/.test(f) ||
-    /^evals\/workflow\//.test(f) ||
-    /^evals\/src\//.test(f),
-);
+// any CLAUDE.md / AGENTS.md (CLAUDE.md is a one-line `@AGENTS.md` import here, so the real
+// content lives in AGENTS.md), project settings, any agent definition, the workflow cases, or the
+// engine itself (src, deps, proxy, the CI workflow).
+const runWorkflow =
+  SCOPE_ALL ||
+  changed.some(
+    (f) =>
+      /(^|\/)(CLAUDE|AGENTS)\.md$/.test(f) ||
+      f === ".claude/settings.json" ||
+      /^\.claude\/agents\/.+\.md$/.test(f) ||
+      /^evals\/(workflow|src|proxy)\//.test(f) ||
+      /^evals\/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|vitest\.config\.ts)$/.test(f) ||
+      f === ".github/workflows/evals.yml",
+  );
 
 const out = process.env.GITHUB_OUTPUT;
 const write = (k, v) => (out ? appendFileSync(out, `${k}=${v}\n`) : console.log(`${k}=${v}`));
@@ -80,9 +98,17 @@ write("skipped_agents", skippedAgents.join(" "));
 
 // Human-readable summary in the step log.
 console.error("── eval change detection ──");
+console.error(`scope         : ${SCOPE_ALL ? "all" : "changed"}`);
 console.error(`changed files : ${changed.length}`);
 console.error(`skills → run  : ${skills.join(", ") || "(none)"}`);
 console.error(`agents → run  : ${agents.join(", ") || "(none)"}`);
 console.error(`workflow tier : ${runWorkflow ? "run" : "skip"}`);
-if (skippedSkills.length) console.error(`SKIP skills (no evals): ${skippedSkills.join(", ")}`);
-if (skippedAgents.length) console.error(`SKIP agents (no evals): ${skippedAgents.join(", ")}`);
+// One SKIP line per artifact, as a ::notice:: annotation on Actions so it is visible without
+// failing anything.
+const skip = (kind, name) => {
+  const msg = `SKIP ${kind} ${name}: no evals/${kind}s/${name}/*.eval.ts`;
+  console.error(msg);
+  if (process.env.GITHUB_ACTIONS) console.log(`::notice title=evals skipped::${msg}`);
+};
+skippedSkills.forEach((n) => skip("skill", n));
+skippedAgents.forEach((n) => skip("agent", n));

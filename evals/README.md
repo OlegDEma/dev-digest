@@ -186,62 +186,35 @@ workflow cases:
 > checkout is disposable); locally, prefer the Anthropic path or a throwaway clone for the workflow
 > tier.
 
-### Wiring it into GitHub Actions (per-PR)
+### GitHub Actions (per-PR) — `.github/workflows/evals.yml`
 
-The engine is CI-ready: bring the proxy up as a step, wait for it, run the tier, tear it down. Put
-the OpenRouter key in the repo's **Actions secrets** as `OPENROUTER_API_KEY` (Settings → Secrets and
-variables → Actions). Create `.github/workflows/<name>.yml` in your repo:
+Runs only the suites a PR touches. `scripts/ci-detect.mjs` maps the diff onto suites (no LLM):
 
-```yaml
-name: evals
-on:
-  pull_request:
-    paths: ['evals/**', '.claude/**', 'CLAUDE.md']   # only when the harness/artifacts change
+| Changed | Runs | Tier / blocking |
+|---|---|---|
+| `.claude/skills/<s>/**` or `evals/skills/<s>/**` | `skills/<s>/` | content, direct to OpenRouter, **blocking** |
+| `.claude/agents/<a>.md` or `evals/agents/<a>/**` | `agents/<a>/` **+ workflow** | tool, LiteLLM proxy, **blocking** |
+| any `CLAUDE.md` / `AGENTS.md`, `.claude/settings.json`, `evals/{src,workflow,proxy}/**`, evals deps, the workflow file | `workflow/` | tool, proxy, **non-blocking** |
 
-permissions:
-  contents: read
+- A changed skill/agent with no `evals/<tier>/<name>/*.eval.ts` is **skipped**, not failed: the
+  `changes` job logs `SKIP skill <name>: …` as a notice. No `OPENROUTER_API_KEY` (fork PR, unset
+  secret) skips every model job the same way.
+- Manual run (Actions → evals → Run workflow): `scope=all` runs every suite that has evals.
+- Fixtures shared across suites are not followed: `architecture-reviewer-lite` reuses
+  `agents/architecture-reviewer/` cases, so a change there re-runs only the strict agent.
 
-jobs:
-  workflow-evals:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: evals
-    env:
-      EVAL_BACKEND: openrouter
-      OPENROUTER_BASE_URL: http://localhost:4000
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}   # repo Actions secret
-      EVAL_MODEL: google/gemini-2.5-flash
-      EVAL_JUDGE_MODEL: google/gemini-2.5-flash
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: evals/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+**Models.** Precedence: `workflow_dispatch` input → repo Variable (Settings → Secrets and variables
+→ Actions → Variables) → default. Switching a model never needs a code change.
 
-      # --- the engine ---
-      - run: docker compose -f proxy/docker-compose.yml up -d   # OPENROUTER_API_KEY from job env
-      - run: pnpm proxy:wait                                     # block until the proxy answers
-      - run: pnpm eval:workflow                                  # or eval:agents / eval:skills / eval
-      - if: failure()
-        run: docker compose -f proxy/docker-compose.yml logs --tail 100
-      - if: always()
-        run: docker compose -f proxy/docker-compose.yml down
-```
+| Variable | Default | Why |
+|---|---|---|
+| `EVAL_MODEL` (skills + agents task) | `deepseek/deepseek-v4-flash` | the product default model (`*/vendor/shared/contracts/platform.ts`), cheap; `deepseek/deepseek-chat` is the README-verified fallback |
+| `EVAL_JUDGE_MODEL` (skills + agents judge) | `google/gemini-2.5-flash` | a different family from the task softens self-preference |
+| `EVAL_WORKFLOW_MODEL` (workflow task + judge) | `google/gemini-2.5-flash` | the only verified cheap model that actually dispatches subagents |
 
-Notes:
-- ubuntu runners ship Docker + `docker compose`, so no extra setup is needed.
-- The proxy container reads `OPENROUTER_API_KEY` straight from the job `env` (which is fed by the
-  secret) — you don't pass it to `docker compose` explicitly.
-- Because tool tiers cost real tokens, gate on `paths:` (only when the harness/artifacts change) and
-  keep the case count small. For a stricter gate, split into a required `eval:agents`/`eval:skills`
-  job and a non-blocking `eval:workflow` job (activation flakiness, above).
+Setup: add `OPENROUTER_API_KEY` as an Actions **secret**. The proxy runs inside the job (Docker
+ships on ubuntu runners) in no-auth mode and is torn down after the run. Each job uploads
+`results/` as an `eval-records-*` artifact.
 
 ## Module layout — `src/` (the engine)
 
@@ -420,9 +393,11 @@ pnpm vitest run src/records/stats.test.ts       # the only non-model unit test (
 
 ### `eval:repeat` — stability of one thing
 
+> **Ceiling: 2 runs.** `eval:repeat` and `eval:benchmark` cap `-n` at `MAX_REPEATS = 2` (`src/config.ts`) — every run is a real Claude session. A larger `-n` is reduced with a notice, not rejected.
+
 ```bash
-pnpm eval:repeat <vitest pattern> [-n times=5] [-t testNamePattern] [--label name]
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline
+pnpm eval:repeat <vitest pattern> [-n times<=2] [-t testNamePattern] [--label name]
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline
 ```
 Runs the pattern N times, then prints per-test pass rate, a per-**practice** table
 (`passed/total (pct)`), and metric stats (`turns`, `duration_ms`, `tokens_out` as mean ± stddev;
@@ -435,9 +410,9 @@ The primary "before vs after a change" workflow. **Capture the baseline label BE
 there is no way to reconstruct it afterwards short of reverting.
 
 ```bash
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline   # BEFORE the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline   # BEFORE the edit
 #   ...edit SKILL.md...
-pnpm eval:repeat skills/onion-architecture -n 5 --label candidate  # AFTER the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label candidate  # AFTER the edit
 pnpm eval:delta baseline candidate
 ```
 Shows the delta at three levels: per-test pass rate, per-**practice** (which practice
@@ -447,9 +422,9 @@ improved, red = regressed, dim = unchanged. A practice on one side only renders 
 ### `eval:benchmark` — measured lift (with vs without the artifact)
 
 ```bash
-pnpm eval:benchmark <vitest pattern> [-n runs=5]
-pnpm eval:benchmark skills/engineering-insights -n 5    # a skill
-pnpm eval:benchmark agents/architecture-reviewer -n 5   # an agent
+pnpm eval:benchmark <vitest pattern> [-n runs<=2]
+pnpm eval:benchmark skills/engineering-insights -n 2    # a skill
+pnpm eval:benchmark agents/architecture-reviewer -n 2   # an agent
 ```
 
 **candidate vs baseline** — the whole idea. The benchmark runs the *same test case* in two
@@ -564,7 +539,7 @@ tokens > 125% of baseline), `missing_data` (a config has zero records for a test
 | `CLAUDE.md` / activation / dispatch | `pnpm eval:workflow` |
 | Any artifact's structure | `pnpm eval:quality` |
 | A `SKILL.md` edit you want to **measure** | repeat/delta loop: `--label baseline` before, `--label candidate` after, then `eval:delta` |
-| New skill/agent — is it **worth its tokens**? | `pnpm eval:benchmark skills/<skill> -n 5` |
+| New skill/agent — is it **worth its tokens**? | `pnpm eval:benchmark skills/<skill> -n 2` |
 | Adding evals for one of **your** skills/agents | `pnpm eval:scaffold <name>` (or `--agent <name>`) |
 | Model / Claude Code version | `pnpm eval` (whole suite) |
 | Stats math changed | `pnpm vitest run src/records/stats.test.ts` |

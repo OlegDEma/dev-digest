@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GREEN, RED, YELLOW, DIM, RESET } from "../ansi.js";
 import { countTests, runVitestOnce } from "../run-vitest.js";
-import { EVAL_MODEL, EVAL_JUDGE_MODEL } from "../config.js";
+import { EVAL_MODEL, EVAL_JUDGE_MODEL, MAX_REPEATS } from "../config.js";
 import { RESULTS_DIR } from "../artifacts/paths.js";
 import { gitInfo } from "../git.js";
 import {
@@ -71,7 +71,7 @@ const cell = (s: Stats) => `${s.mean.toFixed(0)} ± ${s.stddev.toFixed(0)} [${s.
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  let times = 5;
+  let times = MAX_REPEATS;
   let label: string | undefined;
   const vitestArgs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -83,6 +83,10 @@ async function main(): Promise<void> {
   if (vitestArgs.length === 0 || !Number.isFinite(times) || times < 1) {
     console.error("usage: pnpm eval:benchmark <vitest pattern> [-n runs] [--label name]");
     process.exit(1);
+  }
+  if (times > MAX_REPEATS) {
+    console.error(`  capping -n ${times} → ${MAX_REPEATS} (token economy; MAX_REPEATS in src/config.ts)`);
+    times = MAX_REPEATS;
   }
   if (vitestArgs.some((a) => a.includes("workflow"))) {
     console.error(

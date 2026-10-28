@@ -65,6 +65,14 @@ export type WorkflowCase =
       expectSubagents?: string[];
       expectSkills?: string[];
       expectFilesRead?: string[];
+      // Negative facets, checked against the same trace: none of these paths may appear in
+      // filesRead (grep-trap dirs), none of these skills may have engaged.
+      forbidFilesRead?: string[];
+      forbidSkills?: string[];
+      // Content probe: substrings that must appear in the final answer. Auto-loaded context (a
+      // nested AGENTS.md, the CLAUDE.md @import) is not a Read tool call, so filesRead cannot see
+      // it — a fact that lives only in that file, quoted in the answer, is the only trace it leaves.
+      expectTextIncludes?: string[];
       maxTurns?: number;
     };
 
@@ -134,13 +142,16 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
       } else if (c.kind === "activation") {
         const result = await workflowTask(c.prompt, { maxTurns: c.maxTurns });
         logTrace(c.name, result);
+        // The case's own verdict, not `!isError`: an open-ended session can hit maxTurns after the
+        // activation question is already answered, and eval:repeat must not count that as a fail.
+        const ok = activated(result, c.skill) === c.shouldActivate;
         try {
           expect(
             activated(result, c.skill),
             `skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
           ).toBe(c.shouldActivate);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed: ok });
         }
       } else if (c.kind === "trace") {
         // One session, many asserts — every provided expectation is checked against the same trace.
@@ -152,9 +163,16 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const skillEngaged = (p: { skillsInvoked: string[]; filesRead: string[] }, skill: string) =>
           p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
           p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
+        // A case with forbid* facets must run to its natural end: stopping at the first moment
+        // the positives hold would end the session before a grep-trap read could ever happen.
+        const hasForbid = Boolean(
+          c.forbidFilesRead?.length || c.forbidSkills?.length || c.expectTextIncludes?.length,
+        );
         const result = await workflowTask(c.prompt, {
           maxTurns: c.maxTurns,
-          stopWhen: (p) =>
+          stopWhen: hasForbid
+            ? undefined
+            : (p) =>
             subs.every((s) => p.subagents.includes(s)) &&
             skls.every((s) => skillEngaged(p, s)) &&
             files.every((f) => p.filesRead.some((r) => r.includes(f))),
@@ -175,6 +193,18 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
               result.filesRead.some((f) => f.includes(file)),
               `${file} not read | reads: ${result.filesRead.join(", ")}`,
             ).toBe(true);
+          }
+          for (const path of c.forbidFilesRead ?? []) {
+            expect(
+              [...result.filesRead, ...result.searched].filter((f) => f.includes(path)),
+              `forbidden path ${path} was read or searched`,
+            ).toEqual([]);
+          }
+          for (const skill of c.forbidSkills ?? []) {
+            expect(activated(result, skill), `forbidden skill ${skill} engaged`).toBe(false);
+          }
+          for (const needle of c.expectTextIncludes ?? []) {
+            expect(result.text, `answer lacks "${needle}"`).toContain(needle);
           }
           expect(result.isError).toBe(false);
         } finally {

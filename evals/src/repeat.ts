@@ -10,6 +10,7 @@
  * with `pnpm eval:delta baseline candidate`.
  */
 
+import { MAX_REPEATS } from "./config.js";
 import { mkdirSync, writeFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { GREEN, RED, DIM, RESET, rateColor } from "./ansi.js";
@@ -70,9 +71,8 @@ function printTest(agg: NodeAggregate, times: number): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Cap runs at 2 to keep token spend bounded — LLM sessions are expensive, and 2 runs is enough
-  // to catch a blatantly flaky case. Bump MAX_TIMES if you deliberately want a fuller stability run.
-  const MAX_TIMES = 2;
+  // Cap on runs lives in config.ts (MAX_REPEATS) so repeat and benchmark share one ceiling.
+  const MAX_TIMES = MAX_REPEATS;
   let times = MAX_TIMES;
   let label: string | undefined;
   const vitestArgs: string[] = [];

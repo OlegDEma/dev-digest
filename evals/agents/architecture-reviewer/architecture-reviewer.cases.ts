@@ -16,6 +16,10 @@ ${fx("checkout-service.diff")}`;
 // the inward-dependency / DI rule either way.
 const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
 
+Contract for reviewer-core (reviewer-core/AGENTS.md): it performs no I/O beyond the injected LLMProvider, and findings that fail grounding are dropped by \`groundFindings()\` before they are returned.
+
+The diff is a self-contained fixture; its paths may not exist in the working tree. Review the pasted diff as given and return the verdict; do not ask for clarification.
+
 ${fx("reviewer-core-gate.diff")}`;
 
 // A diff that violates NO documented rule (a pure local-variable rename inside a domain file, no
@@ -38,10 +42,10 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the domain file (checkout.ts) importing a type from 'fastify' as a violation of the inward-only dependency rule between Domain and Presentation layers",
       "flags the `new PgCheckoutRepository()` call inside service.ts as a violation of DI discipline (concrete adapters/repositories must be constructed only in the composition root / container)",
-      "names the documented onion-architecture rule violated (by its number or title, e.g. 'Dependencies point inward', 'External I/O enters only through a port') for EVERY finding rather than describing the problem only in prose",
+      "names the documented onion-architecture rule violated (by its number or title, e.g. 'Dependencies point inward', or by the reviewer's own criterion name: Direction, Drizzle, External I/O, Zod at the rim, Orchestration, Contracts, Thin modules) for EVERY finding rather than describing the problem only in prose",
       "assigns a severity (CRITICAL, WARNING or SUGGESTION) to each finding",
-      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
-      "ends with an explicit verdict (approve, request_changes or comment) that is request_changes because at least one CRITICAL finding exists",
+      "cites a concrete location (path and line, or the diff hunk) as evidence for each finding, not a bare claim",
+      "ends with an explicit verdict (request_changes or comment, never approve while violations are reported) that is consistent with the severities it assigned: request_changes if any finding is CRITICAL",
     ],
     threshold: 1.0,
     maxTurns: 25,
@@ -63,10 +67,10 @@ export const cases: AgentCase[] = [
     prompt: REVIEWER_CORE_PROMPT,
     practices: [
       "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation (reviewer-core must do no I/O except the injected LLMProvider)",
-      "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before emitting findings",
-      "names the documented onion-architecture rule (by number or title, i.e. dependencies point inward / reviewer-core performs no I/O beyond the injected LLMProvider) for the fs-import finding rather than only describing it in prose",
-      "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
-      "ends with an explicit verdict (approve, request_changes or comment) that is request_changes because at least one CRITICAL finding exists",
+      "reports as a finding (not merely a question under Not verified) that runPipeline now returns `deduped` directly, skipping `groundFindings()` so ungrounded findings can reach the output",
+      "names the documented onion-architecture rule (by number, title or criterion name, i.e. Direction / dependencies point inward: reviewer-core performs no I/O beyond the injected LLMProvider) for the fs-import finding rather than only describing it in prose",
+      "cites a concrete location (path and line, or the diff hunk) as evidence for each finding, not a bare claim",
+      "ends with an explicit verdict (request_changes or comment, never approve while violations are reported) that is consistent with the severities it assigned: request_changes if any finding is CRITICAL",
     ],
     threshold: 1.0,
     maxTurns: 25,
@@ -78,7 +82,7 @@ export const cases: AgentCase[] = [
     practices: [
       "reports no violations for the benign rename (or records only SUGGESTION-level, non-blocking observations) — it does not invent a CRITICAL or WARNING finding",
       "does not fabricate a documented-rule violation where the diff violates none of the checked rules",
-      "the final verdict is approve (or comment with no CRITICAL finding), not request_changes",
+      "the final verdict is approve (or comment with only SUGGESTION-level observations), not request_changes",
     ],
     threshold: 1.0,
     maxTurns: 25,

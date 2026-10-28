@@ -64,6 +64,7 @@ export async function runOpenRouter(prompt: string, opts: RunOptions = {}): Prom
     subagents: [],
     skillsInvoked: [],
     filesRead: [],
+    searched: [],
     numTurns: 1,
     isError,
     metrics: { durationMs: Date.now() - started, inputTokens, outputTokens, toolCallCount: 0 },

@@ -21,6 +21,10 @@ export const FLAKY_LOW = 0.2; // pass rate strictly inside (20%, 80%) is "flaky"
 export const FLAKY_HIGH = 0.8;
 export const COST_REGRESSION_RATIO = 1.25; // candidate mean tokens > 125% of baseline
 
+// Hard ceiling on repeated runs of the same case (eval:repeat -n, eval:benchmark -n). Every run is a
+// real Claude session; 2 is enough to expose a blatantly flaky case. Raise it here, deliberately.
+export const MAX_REPEATS = 2;
+
 // --- Tool allow-lists -------------------------------------------------------
 // Subagent-spawning tool name varies by harness; count both.
 export const SPAWN_TOOLS = new Set(["Task", "Agent"]);

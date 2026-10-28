@@ -23,6 +23,8 @@ export interface Result {
   /** Skills activated via the Skill tool (workflow mode); name may be "plugin:skill". */
   skillsInvoked: string[];
   filesRead: string[];
+  /** Paths/patterns aimed at by Grep/Glob — a search into a grep-trap dir never shows up in filesRead. */
+  searched: string[];
   numTurns: number;
   isError: boolean;
   metrics: Metrics;
@@ -65,6 +67,9 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
     permissionMode: "bypassPermissions", // safe: evals only read/plan and tools are allow-listed
     systemPrompt,
     allowedTools,
+    // allowedTools only AUTO-APPROVES; under bypassPermissions every other tool stays usable (an
+    // activation case once Edit-ed the live server/INSIGHTS.md). `tools` is what restricts the set.
+    tools: allowedTools,
     cwd: opts.cwd ?? REPO_ROOT,
     // Default: do NOT load on-disk config — isolates the injected artifact. workflowTask overrides.
     settingSources: opts.settingSources ?? [],
@@ -76,6 +81,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
   const subagents: string[] = [];
   const skills: string[] = [];
   const reads: string[] = [];
+  const searched: string[] = [];
   let resultText = "";
   let isError = false;
   let numTurns = 0;
@@ -112,6 +118,9 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
             if (block.name === "Read") {
               const fp = input.file_path ?? input.path;
               if (fp) reads.push(fp);
+            }
+            if (block.name === "Grep" || block.name === "Glob") {
+              for (const v of [input.path, input.glob, input.pattern]) if (typeof v === "string") searched.push(v);
             }
             if (block.name === "Skill") {
               const s = input.skill ?? input.command;
@@ -158,6 +167,7 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
     subagents: [...new Set(subagents)],
     skillsInvoked: [...new Set(skills)],
     filesRead: reads,
+    searched,
     numTurns,
     isError,
     metrics: { durationMs, inputTokens, outputTokens, toolCallCount },
