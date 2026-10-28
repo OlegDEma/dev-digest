@@ -158,6 +158,7 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
 - **2026-10-28** — Harness change detection (`evals/scripts/ci-detect.mjs`) must watch `AGENTS.md` (root and per-package), not just `CLAUDE.md`: every `CLAUDE.md` here is a one-line `@AGENTS.md` import, so the real harness content changes in `AGENTS.md`. Evidence: `cat CLAUDE.md` → `@AGENTS.md`; `evals/scripts/ci-detect.mjs` `runWorkflow`.
 
 ## Recurring Errors & Fixes
+- **2026-10-28** — `ghcr.io/berriai/litellm:main-stable` (unpinned tag in `evals/proxy/docker-compose.yml`) now refuses to boot without a master key: `UnsafeMasterKeyError: ... no master key is set`, which surfaces in CI only as `proxy:wait` → "proxy did not become healthy" on every agents/workflow job. Fix: `LITELLM_MASTER_KEY` = `OPENROUTER_API_KEY` — both eval clients already send that key as bearer, so no code change. Evidence: `evals/proxy/litellm.config.yaml` `master_key`, run `40732440818` (green after the fix).
 
 ## Session Notes
 
