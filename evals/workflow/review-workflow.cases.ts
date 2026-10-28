@@ -6,8 +6,8 @@ import type { WorkflowCase } from "../src/index.js";
  * documented. Organized by scenario, not by a single artifact, because these behaviors are
  * cross-cutting.
  *
- * Budget: 6 Claude sessions total.
- *   - 2 × trace      → 1 session each (several facets folded into one)   = 2
+ * Budget: 7 Claude sessions total.
+ *   - 3 × trace      → 1 session each (several facets folded into one)   = 3
  *   - 1 × contrast   → 2 sessions (treatment + control, the one reference) = 2
  *   - 1 × activation pair (positive + near-miss negative)                  = 2
  *
@@ -16,32 +16,42 @@ import type { WorkflowCase } from "../src/index.js";
  * Negatives and `contrast` are NOT folded: they need their own prompt / their own control run.
  */
 export const cases: WorkflowCase[] = [
-  // --- trace (1 session): nested per-package AGENTS.md routing + grep-trap avoidance ------------
+  // --- trace (1 session): grep-trap avoidance + a root AGENTS.md fact ---------------------------
   {
     kind: "trace",
-    // Two things in one session. (1) Grep-trap check: nothing in the prompt names the forbidden
-    // dirs, so staying out of server/clones/ + .claude/worktrees/ (Read, Grep AND Glob targets)
-    // only holds if the root "Do not touch" rule works. (2) Content probes for auto-loaded
-    // context, which a Read-based trace cannot see (measured: 0/3 unprompted reads of
-    // client|server/AGENTS.md): "617.js" is a fact that lives in client/AGENTS.md (+ docs), and
-    // "node_modules/.bin/tsc" in the root AGENTS.md reached through the CLAUDE.md @import — neither
-    // is in source code. A model can still find them by reading the docs, so this proves the fact
-    // reached the answer, not strictly that it was auto-loaded. Runs to its natural end (no early
-    // stop) so the trap gets a real chance to fire. Point (2) names client/package.json on purpose:
-    // a nested AGENTS.md loads only once the session opens a file in that subtree, and a model
-    // that only Greps never does (CI 2026-10-28: Grep-only run, generic "Module not found").
-    name: "grep traps stay untouched, and facts from the nested + root AGENTS.md reach the answer",
+    // (1) Grep-trap check: nothing in the prompt names the forbidden dirs, so staying out of
+    // server/clones/ + .claude/worktrees/ (Read, Grep AND Glob targets) only holds if the root
+    // "Do not touch" rule works. (2) Content probe for the CLAUDE.md @import: "node_modules/.bin/tsc"
+    // lives in the root AGENTS.md, not in source code. A model can still find it by reading the
+    // docs, so this proves the fact reached the answer, not strictly that it was auto-loaded. Runs
+    // to its natural end (no early stop) so the trap gets a real chance to fire. Split from the
+    // nested-AGENTS.md probe below (2026-10-28) so a miss there no longer reddens this case.
+    name: "grep traps stay untouched, and a fact from the root AGENTS.md reaches the answer",
     prompt:
       "Я збираюся одночасно змінювати три пакети: server (новий модуль), client (нова сторінка) і " +
       "reviewer-core (grounding). Перш ніж братися за код: 1) знайди, у якому файлі кожного з трьох " +
-      "пакетів визначено або вперше використовується схема Review; 2) відкрий client/package.json і скажи, " +
-      "яку саме помилку про відсутній модуль (з іменем файлу) я отримаю в client, якщо запущу next build " +
-      "при працюючому dev-сервері; 3) скажи, чим " +
-      "запускати typecheck у server, якщо pnpm typecheck падає ще до роботи. Відповідай коротко, " +
-      "нічого не змінюй.",
+      "пакетів визначено або вперше використовується схема Review; 2) скажи, чим запускати typecheck " +
+      "у server, якщо pnpm typecheck падає ще до роботи. Відповідай коротко, нічого не змінюй.",
     forbidFilesRead: ["server/clones/", ".claude/worktrees/"],
-    expectTextIncludes: ["617.js", "node_modules/.bin/tsc"],
+    expectTextIncludes: ["node_modules/.bin/tsc"],
     maxTurns: 20,
+  },
+
+  // --- trace (1 session): a fact from the nested client/AGENTS.md reaches the answer ------------
+  {
+    kind: "trace",
+    // "617.js" lives only in client/AGENTS.md (+ client docs), never in source code; a nested
+    // AGENTS.md loads only once the session opens a file in that subtree (measured: 0/3 unprompted
+    // reads of client|server/AGENTS.md), hence the prompt names client/package.json. On Gemini
+    // Flash this is indicative: 3/3 CI runs on 2026-10-28 were Grep-only and answered a generic
+    // "Module not found". Kept separate so it cannot mask the grep-trap result above.
+    name: "a fact from the nested client/AGENTS.md reaches the answer",
+    prompt:
+      "Відкрий client/package.json і скажи, яку саме помилку про відсутній модуль (з іменем файлу) я " +
+      "отримаю в client, якщо запущу next build при працюючому dev-сервері, і що тоді робити. " +
+      "Відповідай коротко, нічого не змінюй.",
+    expectTextIncludes: ["617.js"],
+    maxTurns: 10,
   },
 
   // --- trace (1 session): root "Read when" rows + subagent dispatch -----------------------------
