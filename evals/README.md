@@ -126,7 +126,7 @@ inside `evals/` and needs no code changes to use.
 
 | File | Role |
 |------|------|
-| `proxy/litellm.config.yaml` | LiteLLM config: a wildcard route forwarding any `EVAL_MODEL` slug to OpenRouter, in no-auth mode |
+| `proxy/litellm.config.yaml` | LiteLLM config: a wildcard route forwarding any `EVAL_MODEL` slug to OpenRouter; proxy auth key = `OPENROUTER_API_KEY` |
 | `proxy/docker-compose.yml` | Runs `ghcr.io/berriai/litellm` on `:4000`, both wire formats on one port |
 | `scripts/litellm-proxy.sh` | `up` / `down` / `wait` wrapper (reads `OPENROUTER_API_KEY` from env, else `~/.devdigest/secrets.json`) |
 | `src/runtime/env.ts` | Points the SDK's `ANTHROPIC_BASE_URL` at `OPENROUTER_BASE_URL` (the proxy) under `EVAL_BACKEND=openrouter` |
@@ -154,7 +154,7 @@ pnpm proxy:down
 ```
 
 `EVAL_MODEL` is forwarded verbatim to OpenRouter (the wildcard route in `proxy/litellm.config.yaml`),
-so you never edit config to try a new model. The proxy runs in **no-auth** mode — do not expose the
+so you never edit config to try a new model. The proxy requires `OPENROUTER_API_KEY` as its master key (the clients already send it) — do not expose the
 port publicly.
 
 #### Which cheap model — verified
@@ -213,7 +213,7 @@ Runs only the suites a PR touches. `scripts/ci-detect.mjs` maps the diff onto su
 | `EVAL_WORKFLOW_MODEL` (workflow task + judge) | `google/gemini-2.5-flash` | the only verified cheap model that actually dispatches subagents |
 
 Setup: add `OPENROUTER_API_KEY` as an Actions **secret**. The proxy runs inside the job (Docker
-ships on ubuntu runners) in no-auth mode and is torn down after the run. Each job uploads
+ships on ubuntu runners), keyed by the same `OPENROUTER_API_KEY`, and is torn down after the run. Each job uploads
 `results/` as an `eval-records-*` artifact.
 
 ## Module layout — `src/` (the engine)
