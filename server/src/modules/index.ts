@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import evals from './evals/routes.js';
 import settings from './settings/routes.js';
 import repos from './repos/routes.js';
 import pulls from './pulls/routes.js';
@@ -15,6 +16,7 @@ import blast from './blast/routes.js';
 import history from './history/routes.js';
 import projectContext from './project-context/routes.js';
 import onboarding from './onboarding/routes.js';
+import ci from './ci/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -30,6 +32,7 @@ import onboarding from './onboarding/routes.js';
  * memory, plugins, …) without touching any other module or the shared schema.
  */
 export const modules: Record<string, FastifyPluginAsync> = {
+  evals,
   settings,
   repos,
   pulls,
@@ -46,4 +49,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   history,
   projectContext,
   onboarding,
+  ci,
 };
