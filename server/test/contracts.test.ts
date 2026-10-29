@@ -28,6 +28,9 @@ import {
   Settings,
   Repo,
   PrDetail,
+  EvalCase,
+  EvalExpectation,
+  AgentManifest,
 } from '@devdigest/shared';
 
 /**
@@ -441,5 +444,41 @@ describe('brief contracts', () => {
 
   it('rejects BriefModelOutput missing review_focus', () => {
     expect(BriefModelOutput.safeParse({ summary: 's', risks: [] }).success).toBe(false);
+  });
+});
+
+describe('Eval pipeline contracts', () => {
+  const evalCase = () => ({
+    id: 'c1',
+    owner_kind: 'agent' as const,
+    owner_id: 'a1',
+    name: 'null-deref',
+    expectation: { kind: 'must_find', file: 'src/a.ts', start_line: 3, end_line: 5 },
+    display: { title: 'Null deref', severity: 'WARNING', category: 'bug' },
+    input_diff: 'diff --git a/src/a.ts b/src/a.ts\n',
+    source: { finding_id: 'f1', pr_number: 7, repo: 'o/r' },
+    created_at: '2026-10-29T00:00:00.000Z',
+    last_result: null,
+  });
+
+  it('parses a valid EvalCase (Severity UPPERCASE, category lowercase)', () => {
+    expect(EvalCase.parse(evalCase()).display.severity).toBe('WARNING');
+  });
+
+  it('rejects a lowercase severity', () => {
+    const c = evalCase();
+    c.display.severity = 'warning';
+    expect(EvalCase.safeParse(c).success).toBe(false);
+  });
+
+  it('rejects an EvalExpectation with end_line < start_line', () => {
+    expect(
+      EvalExpectation.safeParse({ kind: 'must_find', file: 'a.ts', start_line: 5, end_line: 4 }).success,
+    ).toBe(false);
+  });
+
+  it('parses an AgentManifest without post_as to github_review', () => {
+    const m = AgentManifest.parse({ name: 'n', model: 'm', system_prompt: 'p' });
+    expect(m.post_as).toBe('github_review');
   });
 });

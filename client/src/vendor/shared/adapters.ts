@@ -61,6 +61,12 @@ export interface StructuredRequest<T> {
   maxTokens?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * OpenRouter session id — groups related generations (e.g. all map-reduce
+   * chunks of one review) into a session in the OpenRouter dashboard. Sent as
+   * the `session_id` body field; ignored by providers that don't support it.
+   */
+  sessionId?: string;
   /** OpenRouter: only route to providers that support every request parameter (e.g. strict json_schema). */
   requireParameters?: boolean;
 }
@@ -110,7 +116,7 @@ export function isStructuredOutputError(e: unknown): e is StructuredOutputError 
 }
 
 export interface LLMProvider {
-  readonly id: 'openai' | 'anthropic';
+  readonly id: 'openai' | 'anthropic' | 'openrouter';
   listModels(): Promise<ModelInfo[]>;
   complete(req: CompletionRequest): Promise<CompletionResult>;
   completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>>;
@@ -155,6 +161,72 @@ export interface OpenPrPayload {
   body: string;
 }
 
+/** A single file to write in a commit (path relative to repo root + UTF-8 text). */
+export interface CommitFile {
+  path: string;
+  contents: string;
+}
+
+export interface CommitFilesPayload {
+  /** Branch to create-or-update with the commit (e.g. "devdigest/ci"). */
+  branch: string;
+  /** Base branch to fork from when `branch` does not yet exist (e.g. "main"). */
+  base: string;
+  message: string;
+  files: CommitFile[];
+}
+
+export interface PrTouchingFile {
+  number: number;
+  title: string;
+  merged_at: string | null;
+  author: string;
+  path: string;
+}
+export interface HistoryLimits {
+  maxFiles: number;
+  perFileCommits: number;
+  maxCommits: number;
+  /** Overall budget for the whole fan-out; the call rejects once it is spent. */
+  deadlineMs: number;
+  /** How many PR lookups may run at once. */
+  concurrency: number;
+}
+
+/** One GitHub Actions workflow run (the fields the CI-runs ingest needs). */
+export interface WorkflowRunMeta {
+  /** Numeric GitHub run id as a string (stable, globally unique). */
+  id: string;
+  /** `success` | `failure` | … ; null while the run has not finished. */
+  conclusion: string | null;
+  /** ISO timestamp the run was created. */
+  created_at: string;
+  html_url: string;
+}
+
+/** One artifact attached to a workflow run. */
+export interface RunArtifactMeta {
+  id: number;
+  name: string;
+  expired: boolean;
+}
+
+/**
+ * Thrown by `GitHubClient.downloadArtifactZip` when GitHub answers 410 (the
+ * artifact aged out of retention). Match with `isArtifactExpiredError` (by name,
+ * safe across module instances).
+ */
+export class ArtifactExpiredError extends Error {
+  constructor(message = 'Artifact expired') {
+    super(message);
+    this.name = 'ArtifactExpiredError';
+  }
+}
+
+export function isArtifactExpiredError(e: unknown): e is ArtifactExpiredError {
+  return e instanceof Error && e.name === 'ArtifactExpiredError';
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -168,11 +240,32 @@ export interface GitHubClient {
     input: CreateReviewCommentInput,
   ): Promise<PrReviewComment>;
   openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }>;
+  /**
+   * Commit `files` onto `branch` as ONE atomic commit (Git Data API: blobs →
+   * tree → commit → ref). Creates the branch from `base` if missing, else
+   * fast-forwards it. Idempotent: re-publishing just adds a new commit.
+   */
+  commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
+  /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
+  findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  /** Workflow runs of `workflowFile` created on/after `sinceIso`, newest first. */
+  listWorkflowRuns(repo: RepoRef, workflowFile: string, sinceIso: string): Promise<WorkflowRunMeta[]>;
+  /** Artifacts attached to a workflow run. */
+  listRunArtifacts(repo: RepoRef, runId: string): Promise<RunArtifactMeta[]>;
+  /** The artifact's zip bytes. Throws `ArtifactExpiredError` on 410. */
+  downloadArtifactZip(repo: RepoRef, artifactId: number): Promise<Uint8Array>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** Raw UTF-8 text of a file at `ref` (contents API — reads a ref, not a working tree). Throws if absent or not a file. */
   getFileContent(repo: RepoRef, path: string, ref: string): Promise<string>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /** PRs associated with recent commits that touched `files` (I/O only; filtering is the caller's). */
+  listPrsTouchingFiles(
+    repo: RepoRef,
+    files: string[],
+    excludeNumber: number,
+    limits: HistoryLimits,
+  ): Promise<PrTouchingFile[]>;
 }
 
 // ---------- Git (simple-git, heavy) ----------
@@ -216,8 +309,22 @@ export interface GitCommit {
 export interface GitClient {
   clone(repo: RepoRef, url: string, opts?: CloneOptions): Promise<{ path: string }>;
   fetchPullHead(repo: RepoRef, n: number): Promise<void>;
+  /**
+   * Resync an already-cloned repo to the tip of `branch`: fetch from origin and
+   * advance the local working tree to `origin/<branch>`. Unlike `clone`'s bare
+   * `fetch` (which only moves remote-tracking refs), this moves local HEAD so a
+   * subsequent index reflects the latest code. Returns the new HEAD sha.
+   */
+  sync(repo: RepoRef, branch: string): Promise<{ head: string }>;
   currentHead(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
+  /**
+   * Names of files changed between two commits (`git diff --name-only base..head`).
+   * Two-dot form is intentional — we want files reachable from `head` but not `base`,
+   * matching the incremental indexer's "what moved since last_indexed_sha?" semantics.
+   * Returns an empty array when the two refs resolve to the same commit.
+   */
+  diffNameOnly(repo: RepoRef, base: string, head: string): Promise<string[]>;
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;
   readFile(repo: RepoRef, path: string): Promise<string>;

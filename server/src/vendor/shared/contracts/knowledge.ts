@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Conformance, Eval, Memory, Conventions, Skills,
@@ -49,16 +50,53 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+export const EvalExpectationKind = z.enum(['must_find', 'must_not_flag']);
+export type EvalExpectationKind = z.infer<typeof EvalExpectationKind>;
+
+export const EvalExpectation = z
+  .object({
+    kind: EvalExpectationKind,
+    file: z.string().min(1),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1),
+  })
+  .refine((e) => e.end_line >= e.start_line, {
+    message: 'end_line must be >= start_line',
+    path: ['end_line'],
+  });
+export type EvalExpectation = z.infer<typeof EvalExpectation>;
+
+export const EvalCaseStatus = z.enum(['pass', 'fail', 'error']);
+export type EvalCaseStatus = z.infer<typeof EvalCaseStatus>;
+
+/** An agent eval case created from a decided finding (response shape). */
 export const EvalCase = z.object({
   id: z.string(),
-  owner_kind: EvalOwnerKind,
+  owner_kind: z.literal('agent'),
   owner_id: z.string(),
   name: z.string(),
+  expectation: EvalExpectation,
+  /** Copied from the finding for display only — never used in matching. */
+  display: z.object({
+    title: z.string(),
+    severity: Severity,
+    category: FindingCategory,
+  }),
   input_diff: z.string(),
-  input_files: z.unknown(),
-  input_meta: z.unknown(),
-  expected_output: z.unknown(),
-  notes: z.string().nullish(),
+  source: z.object({
+    finding_id: z.string().nullable(),
+    pr_number: z.number().int(),
+    repo: z.string(),
+  }),
+  created_at: z.string(),
+  last_result: z
+    .object({
+      run_id: z.string(),
+      status: EvalCaseStatus,
+      ran_at: z.string(),
+      summary: z.string(),
+    })
+    .nullable(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;
 
