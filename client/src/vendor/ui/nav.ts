@@ -37,6 +37,8 @@ export const NAV: NavGroup[] = [
       // Conventions are extracted per repo but authored here: the board's output
       // is an ordinary skill, so it belongs beside Skills, not under WORKSPACE.
       { key: "conventions", label: "Conventions", icon: "ListChecks", href: "/repos/:repoId/conventions", gKey: "c" },
+      { key: "eval", label: "Eval Dashboard", icon: "FlaskConical", href: "/eval" },
+      { key: "ci-runs", label: "CI Runs", icon: "Workflow", href: "/ci-runs" },
     ],
   },
 ];
