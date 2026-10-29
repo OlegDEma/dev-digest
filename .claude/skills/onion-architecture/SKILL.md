@@ -43,7 +43,7 @@ domain never reaches out; the rim reaches all the way in. See
 [`references/layermap.md`](references/layermap.md) for the full per-file breakdown
 and the known deviations we are paying down.
 
-## The seven rules
+## The ten rules
 
 1. **Dependencies point inward — always.** An outer ring may depend on any inner
    ring; an inner ring may never name an outer one. The domain (`reviewer-core`)
@@ -83,6 +83,83 @@ and the known deviations we are paying down.
    no persistence of its own. The moment it writes to the DB or coordinates more
    than one call, it earns the full split. Record the choice; don't drift into it.
 
+8. **Deferred, scheduled and cross-module work enters through the job port.**
+   Time and "later" are I/O too. `container.jobs` (`platform/jobs.ts`,
+   `JobRunner`) is the port for them: it persists a `jobs` row, retries with
+   backoff and records the failure. So inside `modules/`:
+   - **No timers.** No `setInterval` / `setTimeout` / cron library to schedule
+     work or to retry a failed call. A recurring task is a registered job kind
+     triggered by the platform; a retry is the JobRunner's, not a hand-rolled
+     `setTimeout(() => this.again(), …)`. In-process timers vanish on restart,
+     run once per API instance, and hide failures. *Not* covered: a timer that
+     only bounds an awaited call (a deadline raced against a promise and
+     cleared in `finally`) — nothing is scheduled, the caller still awaits.
+   - **No module calls another module's service to react to an event.** When
+     module A finishing something should make module B act ("PR synced →
+     start an auto-review"), A enqueues a job kind and B registers its handler
+     (`container.jobs.register` in B's service, as `repos/service.ts`
+     `registerCloneJobHandler` does). A never imports B's `service.ts`; that
+     edge is how module cycles start.
+   - **No swallowed fire-and-forget for work that must happen.** `void x().catch(() => {})`
+     on a side effect someone relies on (a webhook, an email, a status update) loses it
+     silently; enqueue it. The sanctioned exception is a **review run on the run
+     executor** (`reviews/service.ts` → `run-executor`, and any other entry
+     point that starts the same executor): its `agent_runs` row is created
+     *before* the fire, the `.catch` records the failure on that row instead of
+     swallowing it, and stale `running` rows are reaped on boot. That trio —
+     durable row first, failure recorded, reaper — is what makes it safe; do
+     not flag it, and do not copy the pattern without all three. The **eval-run
+     executor** is sanctioned on the same terms (`evals/service.ts` →
+     `evals/executor.ts`): its `eval_runs` row is inserted `running` *before*
+     the fire, the `.catch` writes `failed` + the message onto that row, and
+     `app.ts` reaps stale `running` rows on boot (`EvalService.reapStaleRuns`).
+
+9. **A module's `index.ts` is its public API, not a back door.** Crossing into
+   another module through its barrel is allowed only for what that module
+   *chooses* to publish: its service/facade class, its port-shaped types, its
+   job-kind constants. A barrel must not re-export data access — no
+   `export * from './repository…'`, no `*.repo.ts` functions, no Drizzle row
+   helpers — and should not use blanket `export *` at all, because that silently
+   publishes every internal the module adds later. Importing another module's
+   query function *through* its barrel is the same leak as importing the file
+   directly: the consumer now depends on that module's tables. If you need
+   another module's data, call its service (or a query it deliberately exposes
+   via `db/rows.ts`), not its repository. Judge a barrel by its export
+   lines, never by its module name. Known deviation — specific statements, not the
+   file: in `server/src/modules/repo-intel/index.ts`,
+   `export * from './repository.js'` and the blanket `export *` of
+   `service.js` — don't copy it; narrow it when touched. Any barrel, including
+   a `repo-intel/index.ts` you are looking at, that exports only named types,
+   constants or a service is fine and is not this deviation.
+
+10. **Cross-module imports follow the allow-list — and only the allow-list.**
+    Which module may import which is a *project decision*, not something to
+    judge case by case: an edge that is not listed below is forbidden, even
+    when it is a harmless-looking type or constant imported through a clean
+    `index.ts`. Every unlisted edge couples release order, test setup and
+    ownership between two teams' modules, so adding one is a reviewed change:
+    put the new edge in this table (and in `references/layermap.md`) in the same
+    PR, with a one-line reason. Current allow-list (`importer → allowed targets`):
+
+    | Module | May import from |
+    | --- | --- |
+    | `reviews` | `intent` |
+    | `intent` | `reviews`, `settings` |
+    | `blast` | `reviews`, `repo-intel` |
+    | `conventions` | `repo-intel`, `settings` |
+    | `history` | `reviews` |
+    | `repos` | `repo-intel` |
+    | `evals` | `reviews` (`loadDiff` + `PullRow` type for case creation) |
+    | `ci` | `repos` (connected-repo check via `RepoRepository`) |
+    | any module | `_shared/` |
+    | every other pair | — (forbidden) |
+
+    A module not in the left column (including any new module) may import no
+    other module until a row is added for it. Shared vocabulary does not need an
+    edge: put it in `@devdigest/shared` (types, constants) or `platform/`.
+    An unlisted edge is at least **should-fix**; it blocks when it also creates
+    a cycle.
+
 ## "Where does this code go?" — decision path
 
 ```
@@ -99,6 +176,11 @@ Does it talk to GitHub / an LLM / git / the filesystem?
 Does it coordinate several of the above for one use case (tenancy, ordering,
 transactions, background jobs)?
   → a service (modules/<name>/service.ts) or an extracted executor.
+
+Must it run later, on a schedule, with retries, or in reaction to another
+module's event?
+  → a job kind: the producer calls container.jobs.enqueue(...), the owning
+    module's service registers the handler. No timers, no cross-module service import.
 
 Is it parsing/shaping HTTP request & response, SSE, status codes?
   → the route (modules/<name>/routes.ts) — and only there.

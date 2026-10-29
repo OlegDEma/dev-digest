@@ -1,0 +1,5 @@
+name: DevDigest Review
+description: Run a DevDigest agent (from .devdigest/agents/*.yaml) against a pull request and post the review.
+runs:
+  using: node20
+  main: dist/index.js

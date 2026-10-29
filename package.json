@@ -1,0 +1,7 @@
+{
+  "name": "devdigest-root",
+  "private": true,
+  "scripts": {
+    "verify:l06": "./scripts/verify.sh --full server client reviewer-core"
+  }
+}

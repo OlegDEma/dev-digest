@@ -1,0 +1,1 @@
+CREATE INDEX "eval_cases_ws_agent" ON "eval_cases" USING btree ("workspace_id","agent_id");

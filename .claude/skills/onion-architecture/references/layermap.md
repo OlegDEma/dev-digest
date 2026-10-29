@@ -50,6 +50,7 @@ owns I/O sequencing and persistence + observability — but not the algorithm
 - Construct from the container: `new ReviewService(container)`; the service then
   builds its repository (`new ReviewRepository(container.db)`) and reaches ports
   via `container.llm(...)`, `container.github()`, `container.repoIntel`.
+- `evals/executor.ts` is a second sanctioned fire-and-forget executor (row inserted `running` first, `.catch` writes `failed` on the row, boot reaper in `app.ts`).
 - `reviews/run-executor.ts` is the pattern for heavy background work extracted
   out of the service: "The service owns only I/O … and persistence + observability."
   It calls `reviewPullRequest(...)` from `@devdigest/reviewer-core` — application
@@ -116,6 +117,24 @@ every ring.
   `settings/`: routes only (± helpers). Legitimate *only* as pure read/proxy;
   see deviations below.
 
+## Cross-module allow-list (rule 10)
+
+The only module→module import edges allowed under `server/src/modules/`. Anything
+else is forbidden until a row is added here *and* in `SKILL.md` rule 10, in the
+same PR, with a reason.
+
+| Importer | Allowed targets | Why |
+| --- | --- | --- |
+| `reviews` | `intent` | the run executor asks intent for the PR summary |
+| `intent` | `reviews`, `settings` | reads the PR/diff via `ReviewRepository`; feature-model routing |
+| `blast` | `reviews`, `repo-intel` | PR context + the code index |
+| `conventions` | `repo-intel`, `settings` | index-backed extraction; feature-model routing |
+| `history` | `reviews` | review history views |
+| `repos` | `repo-intel` | enqueues index/refresh jobs |
+| `evals` | `reviews` | `loadDiff` + `PullRow` type for case creation |
+| `ci` | `repos` | connected-repo check via `RepoRepository` |
+| any | `_shared/` | route helpers (`getContext`, `IdParams`) |
+
 ## Known deviations (paying-down list)
 
 The layering is a convention the codebase *mostly* follows. These are the current
@@ -130,6 +149,12 @@ exceptions — the skill's job is to stop new ones and, when touched, migrate th
   re-evaluate the moment they persist or orchestrate.
 - **`settings/`** — routes + helpers, no repository. Acceptable today; if settings
   gain their own persistence, add a repository rather than querying inline.
+- **`server/src/modules/repo-intel/index.ts`, the line
+  `export * from './repository.js'`** (plus the blanket `export *` of
+  `service.js`) — lets any module reach repo-intel's Drizzle helpers through the
+  barrel. The deviation is those statements, not the file or the module name: a
+  repo-intel barrel with only named type/constant/service exports is fine.
+  Rule 9: narrow it when touched.
 
 `server/docs/` and `server/specs/` are currently stubs, so the documented sources
 of truth are the `AGENTS.md` files, `README.md` (the request/DI-flow diagram),

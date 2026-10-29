@@ -72,7 +72,7 @@ module.exports = {
         pathNot: [
           '^server/src/modules/$1/',        // same module — allowed
           '^server/src/modules/_shared/',   // shared route helpers — allowed
-          '^server/src/modules/[^/]+/index\\.ts$', // public barrels — allowed
+          '^server/src/modules/[^/]+/index\\.ts$', // public barrels — allowed (rule 9: barrels publish API only)
         ],
       },
     },
@@ -155,6 +155,19 @@ grep -rnE "fastify" server/src/modules/*/service.ts server/src/modules/*/reposit
 
 # Rule 1 — reviewer-core reaching back into the server
 grep -rnE "from '.*server/src|@devdigest/api" reviewer-core/src
+
+# Rule 10 — list every module→module edge, then diff it against the allow-list
+#          in layermap.md (any edge not in the table is a finding)
+for f in $(grep -rlE "from '\.\./[a-z-]+/" server/src/modules); do m=${f#server/src/modules/}; m=${m%%/*}; \
+  grep -oE "from '\.\./[a-z-]+/" "$f" | sed -E "s#from '\.\./([a-z-]+)/#$m -> \1#"; done | grep -v -- '-> _shared' | sort -u
+
+# Rule 9 — barrels that publish data access (depcruise allows any import of index.ts,
+# so check what the barrel exports)
+grep -nE "export \* from|from '\./repository" server/src/modules/*/index.ts
+
+# Rule 8 — timers and cross-module service imports inside modules
+grep -rnE "\b(setInterval|setTimeout)\(|node-cron|from 'cron'" server/src/modules
+grep -rnE "from '\.\./[a-z-]+/service\.js'" server/src/modules
 ```
 
 A hit is a lead, not a verdict — confirm it's a real cross-ring import and not,

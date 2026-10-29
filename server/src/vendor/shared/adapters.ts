@@ -193,6 +193,40 @@ export interface HistoryLimits {
   concurrency: number;
 }
 
+/** One GitHub Actions workflow run (the fields the CI-runs ingest needs). */
+export interface WorkflowRunMeta {
+  /** Numeric GitHub run id as a string (stable, globally unique). */
+  id: string;
+  /** `success` | `failure` | … ; null while the run has not finished. */
+  conclusion: string | null;
+  /** ISO timestamp the run was created. */
+  created_at: string;
+  html_url: string;
+}
+
+/** One artifact attached to a workflow run. */
+export interface RunArtifactMeta {
+  id: number;
+  name: string;
+  expired: boolean;
+}
+
+/**
+ * Thrown by `GitHubClient.downloadArtifactZip` when GitHub answers 410 (the
+ * artifact aged out of retention). Match with `isArtifactExpiredError` (by name,
+ * safe across module instances).
+ */
+export class ArtifactExpiredError extends Error {
+  constructor(message = 'Artifact expired') {
+    super(message);
+    this.name = 'ArtifactExpiredError';
+  }
+}
+
+export function isArtifactExpiredError(e: unknown): e is ArtifactExpiredError {
+  return e instanceof Error && e.name === 'ArtifactExpiredError';
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -214,6 +248,12 @@ export interface GitHubClient {
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  /** Workflow runs of `workflowFile` created on/after `sinceIso`, newest first. */
+  listWorkflowRuns(repo: RepoRef, workflowFile: string, sinceIso: string): Promise<WorkflowRunMeta[]>;
+  /** Artifacts attached to a workflow run. */
+  listRunArtifacts(repo: RepoRef, runId: string): Promise<RunArtifactMeta[]>;
+  /** The artifact's zip bytes. Throws `ArtifactExpiredError` on 410. */
+  downloadArtifactZip(repo: RepoRef, artifactId: number): Promise<Uint8Array>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** Raw UTF-8 text of a file at `ref` (contents API — reads a ref, not a working tree). Throws if absent or not a file. */
   getFileContent(repo: RepoRef, path: string, ref: string): Promise<string>;
