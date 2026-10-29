@@ -1,0 +1,13 @@
+{
+  "name": "Eval Dashboard renders its heading, agent cards and recent-runs section",
+  "description": "Loads /eval and confirms the Eval Dashboard heading and SKILLS LAB nav item, that a seeded agent (Security Reviewer) is rendered as a card, that an agent without a finished run reads 'No runs yet' (no eval runs are seeded), and that the recent-runs section is present. Exercises GET /eval-dashboard. CI-only: needs the seeded stack (Docker).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/eval"], "label": "load the Eval Dashboard page" },
+    { "cmd": ["wait", "--url", "/eval"], "label": "eval route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "dashboard fetch settles" },
+    { "cmd": ["wait", "--text", "Eval Dashboard"], "label": "page heading and nav item are visible" },
+    { "cmd": ["wait", "--text", "Security Reviewer"], "label": "seeded agent card is visible" },
+    { "cmd": ["wait", "--text", "No runs yet"], "label": "agent without a finished run says so" },
+    { "cmd": ["wait", "--text", "Recent eval runs"], "label": "recent runs section is visible" }
+  ]
+}

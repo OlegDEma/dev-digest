@@ -168,6 +168,7 @@ export function ReviewRunAccordion({
             headSha={headSha}
             targetFindingId={containsTarget ? targetFindingId : null}
             targetNonce={targetNonce}
+            agentId={review.agent_id}
           />
         </div>
       )}
