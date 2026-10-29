@@ -50,6 +50,7 @@ owns I/O sequencing and persistence + observability — but not the algorithm
 - Construct from the container: `new ReviewService(container)`; the service then
   builds its repository (`new ReviewRepository(container.db)`) and reaches ports
   via `container.llm(...)`, `container.github()`, `container.repoIntel`.
+- `evals/executor.ts` is a second sanctioned fire-and-forget executor (row inserted `running` first, `.catch` writes `failed` on the row, boot reaper in `app.ts`).
 - `reviews/run-executor.ts` is the pattern for heavy background work extracted
   out of the service: "The service owns only I/O … and persistence + observability."
   It calls `reviewPullRequest(...)` from `@devdigest/reviewer-core` — application
@@ -130,6 +131,8 @@ same PR, with a reason.
 | `conventions` | `repo-intel`, `settings` | index-backed extraction; feature-model routing |
 | `history` | `reviews` | review history views |
 | `repos` | `repo-intel` | enqueues index/refresh jobs |
+| `evals` | `reviews` | `loadDiff` + `PullRow` type for case creation |
+| `ci` | `repos` | connected-repo check via `RepoRepository` |
 | any | `_shared/` | route helpers (`getContext`, `IdParams`) |
 
 ## Known deviations (paying-down list)

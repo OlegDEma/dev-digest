@@ -82,6 +82,7 @@ Sections are fixed. Add to the one that fits; never invent a new heading.
 
 ## Tool & Library Notes
 - **2026-10-11** — `@testing-library/user-event` is NOT installed in `client/` (tests import it and fail with `Failed to resolve import`, and tsc `TS2307`); the plan/skill templates assume it. Drive tests with `fireEvent` (it does not focus the target — call `el.focus()` first when asserting focus return) and wrap post-click assertions on mutations in `waitFor`, since `useMutation` runs `onMutate` asynchronously. Evidence: `client/package.json` devDependencies, `client/src/components/project-context/DocPreviewDrawer/DocPreviewDrawer.test.tsx`.
+- **2026-10-29** — Testing a TanStack Query hook with `renderHook` + fake timers has two traps. (1) React Query re-renders only for the result props the render body touched, so `renderHook(() => useEvalRun(id))` never sees `isError` flip: read it in the callback (`const q = useX(); return { data: q.data, isError: q.isError }`). (2) A `new Response(...)` body needs real macrotasks and never resolves under `vi.useFakeTimers()`: stub `fetch` with `{ ok, status, json: async () => body }`, and advance ~250 ms after each interval step so the result is delivered. Evidence: `client/src/lib/hooks/evals.test.tsx` (`tick`, `json`).
 
 ## Recurring Errors & Fixes
 
