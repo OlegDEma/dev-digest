@@ -227,4 +227,77 @@ describe('reviewPullRequest — onPromptAssembled hook', () => {
     });
     expect(outcome.review.verdict).toBe('approve');
   });
+
+});
+
+describe('reviewPullRequest — contextFiles', () => {
+  const fixture = {
+    verdict: 'request_changes',
+    summary: 'secret key committed',
+    score: 38,
+    findings: [
+      {
+        id: 'f1',
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'Hardcoded Stripe secret key',
+        file: 'src/config.ts',
+        start_line: 11,
+        end_line: 11,
+        rationale: 'sk_live in diff',
+        confidence: 0.98,
+        kind: 'finding',
+      },
+    ],
+  };
+
+  it('forwards contextFiles to the prompt; a finding citing a Files-only path is dropped (AC-D14, AC-D17, EC-D11)', async () => {
+    const withFilesOnly = {
+      ...fixture,
+      findings: [
+        fixture.findings[0],
+        { ...fixture.findings[0], id: 'f-ctx', file: 'src/context-only.ts', start_line: 1, end_line: 1 },
+      ],
+    };
+    const llm = new MockLLMProvider('openai', { structured: withFilesOnly });
+    const calls: string[] = [];
+    const orig = llm.completeStructured.bind(llm);
+    llm.completeStructured = (async (req: Parameters<typeof orig>[0]) => {
+      calls.push(req.messages[1]!.content);
+      return orig(req);
+    }) as typeof llm.completeStructured;
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'gpt-4.1',
+      diff,
+      llm,
+      contextFiles: [{ path: 'src/context-only.ts', content: 'const hidden = 1;' }],
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('const hidden = 1;');
+    expect(calls[0]!.indexOf('## Additional files')).toBeLessThan(calls[0]!.indexOf('## Diff to review'));
+    expect(outcome.review.findings.map((f) => f.file)).toEqual(['src/config.ts']);
+    expect(outcome.dropped.map((d) => d.finding.id)).toEqual(['f-ctx']);
+    expect(outcome.grounding).toBe('1/2 passed');
+  });
+
+  it('omits the section when contextFiles is absent', async () => {
+    const llm = new MockLLMProvider('openai', { structured: fixture });
+    const calls: string[] = [];
+    const orig = llm.completeStructured.bind(llm);
+    llm.completeStructured = (async (req: Parameters<typeof orig>[0]) => {
+      calls.push(req.messages[1]!.content);
+      return orig(req);
+    }) as typeof llm.completeStructured;
+    await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'gpt-4.1',
+      diff: await new MockGitClient().diff(),
+      llm,
+    });
+    expect(calls[0]).not.toContain('Additional files');
+  });
 });

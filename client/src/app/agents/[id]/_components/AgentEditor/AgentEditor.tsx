@@ -11,6 +11,7 @@ import { ContextDocsTab } from "../../../../../components/project-context/Contex
 import { ConfigTab } from "./_components/ConfigTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { EvalsTab } from "./_components/EvalsTab";
+import { StatsTab } from "./_components/StatsTab";
 import { CiTab } from "./_components/CiTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -32,6 +33,8 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
           <ContextDocsTab key={agent.id} variant="agent" owner={agent} />
         ) : tab === "evals" ? (
           <EvalsTab key={agent.id} agent={agent} />
+        ) : tab === "stats" ? (
+          <StatsTab key={agent.id} agent={agent} />
         ) : tab === "ci" ? (
           <CiTab key={agent.id} agent={agent} />
         ) : (

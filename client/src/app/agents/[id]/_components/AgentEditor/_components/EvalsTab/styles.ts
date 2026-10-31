@@ -7,6 +7,7 @@ export const s = {
   titles: { flex: 1 } satisfies CSSProperties,
   h2: { fontSize: 18, fontWeight: 700, margin: 0 } satisfies CSSProperties,
   subtitle: { fontSize: 13, color: "var(--text-secondary)", marginTop: 2 } satisfies CSSProperties,
+  dashboardLink: { fontSize: 13, color: "var(--accent)", whiteSpace: "nowrap" } satisfies CSSProperties,
   status: { fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 } satisfies CSSProperties,
   reconnecting: { fontSize: 13, color: "var(--warn)", marginBottom: 12 } satisfies CSSProperties,
   error: { fontSize: 13, color: "var(--crit)", marginBottom: 12 } satisfies CSSProperties,

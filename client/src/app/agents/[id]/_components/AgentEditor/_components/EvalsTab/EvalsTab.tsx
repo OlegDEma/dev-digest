@@ -1,19 +1,20 @@
-/* EvalsTab — the agent's eval cases, run controls, metrics and history. A run
-   is started with "Run all evals (N)"; its progress is polled every 4 s (in
-   useEvalRun). A 409 attaches to the run already in progress. */
+/* EvalsTab — the agent's eval metrics and eval cases with their run controls and
+   the case editor. A run (all cases, or one via a row's ▷) is started here; its
+   progress is polled every 4 s (in useEvalRun). While a run is `running` or
+   `queued` every run button is disabled. A 409 attaches to the run already in
+   progress. Run history and Compare live on the per-agent eval page. */
 "use client";
 
 import React from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Button } from "@devdigest/ui";
+import { EvalCaseEditor } from "@/components/eval-case-editor";
 import type { Agent } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import { useAgentEvalCases, useAgentEvalRuns, useEvalRun, useStartEvalRun } from "@/lib/hooks/evals";
 import { CaseList } from "./_components/CaseList";
-import { CompareModal } from "./_components/CompareModal";
 import { MetricCards } from "./_components/MetricCards";
-import { RunHistory } from "./_components/RunHistory";
 import { s } from "./styles";
 
 const SETTINGS_API_KEYS_HREF = "/settings/api-keys";
@@ -27,28 +28,28 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const t = useTranslations("eval");
   const casesQ = useAgentEvalCases(agent.id);
   const runsQ = useAgentEvalRuns(agent.id);
-  const startRun = useStartEvalRun(agent.id);
+  const startRun = useStartEvalRun(agent.id, { silentError: true });
   const [attachedRunId, setAttachedRunId] = React.useState<string | null>(null);
   const [startError, setStartError] = React.useState<StartError | null>(null);
-  const [selected, setSelected] = React.useState<string[]>([]);
-  const [comparing, setComparing] = React.useState(false);
+  const [editor, setEditor] = React.useState<{ caseId: string | null } | null>(null);
 
-  const listRunning = (runsQ.data ?? []).find((r) => r.status === "running");
-  const trackedRunId = attachedRunId ?? listRunning?.id ?? null;
+  const listRunning = (runsQ.data ?? []).find((r) => r.status === "running" || r.status === "queued");
+  const trackedRunId = listRunning?.id ?? attachedRunId;
   const runQ = useEvalRun(trackedRunId);
 
   const caseCount = casesQ.data?.length ?? 0;
   const isRunning =
     startRun.isPending ||
     runQ.data?.status === "running" ||
+    runQ.data?.status === "queued" ||
     (!runQ.data && !!trackedRunId && !runQ.isError) ||
-    (!runQ.data && !!listRunning);
+    !!listRunning;
   const progress = runQ.data?.progress ?? listRunning?.progress ?? { done: 0, total: caseCount };
   const reconnecting = !!trackedRunId && runQ.isError;
 
-  const onRun = () => {
+  const onRun = (caseId?: string) => {
     setStartError(null);
-    startRun.mutate(undefined, {
+    startRun.mutate(caseId ? { case_id: caseId } : undefined, {
       onSuccess: (run) => setAttachedRunId(run.id),
       onError: (err) => {
         const details = err instanceof ApiError ? (err.details as { run_id?: string } | undefined) : undefined;
@@ -61,9 +62,6 @@ export function EvalsTab({ agent }: { agent: Agent }) {
     });
   };
 
-  const toggle = (runId: string) =>
-    setSelected((cur) => (cur.includes(runId) ? cur.filter((id) => id !== runId) : [...cur, runId]));
-
   return (
     <div style={s.wrap}>
       <div style={s.header}>
@@ -71,9 +69,9 @@ export function EvalsTab({ agent }: { agent: Agent }) {
           <h2 style={s.h2}>{t("evalsTab.metricsTitle")}</h2>
           <div style={s.subtitle}>{t("evalsTab.metricsSubtitle")}</div>
         </div>
-        <Button kind="primary" icon="Play" disabled={caseCount === 0 || isRunning} onClick={onRun}>
-          {t("evalsTab.runAll", { count: caseCount })}
-        </Button>
+        <Link href={`/eval/${agent.id}`} style={s.dashboardLink}>
+          {t("evalsTab.viewDashboard")}
+        </Link>
       </div>
 
       {isRunning && (
@@ -98,11 +96,29 @@ export function EvalsTab({ agent }: { agent: Agent }) {
       )}
 
       <MetricCards agentId={agent.id} />
-      <CaseList agentId={agent.id} />
-      <RunHistory agentId={agent.id} selected={selected} onToggle={toggle} onCompare={() => setComparing(true)} />
+      <CaseList
+        agentId={agent.id}
+        runDisabled={isRunning}
+        onRunCase={(caseId) => onRun(caseId)}
+        onEdit={(caseId) => setEditor({ caseId })}
+        actions={
+          <>
+            <Button kind="primary" icon="Play" disabled={caseCount === 0 || isRunning} onClick={() => onRun()}>
+              {t("evalsTab.runAll", { count: caseCount })}
+            </Button>
+            <Button kind="secondary" icon="Plus" onClick={() => setEditor({ caseId: null })}>
+              {t("evalsTab.newCase")}
+            </Button>
+          </>
+        }
+      />
 
-      {comparing && selected.length === 2 && (
-        <CompareModal runIds={[selected[0] as string, selected[1] as string]} onClose={() => setComparing(false)} />
+      {editor && (
+        <EvalCaseEditor
+          agent={{ id: agent.id, name: agent.name }}
+          caseId={editor.caseId}
+          onClose={() => setEditor(null)}
+        />
       )}
     </div>
   );

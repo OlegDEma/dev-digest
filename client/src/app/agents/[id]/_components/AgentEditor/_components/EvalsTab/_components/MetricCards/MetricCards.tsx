@@ -1,6 +1,7 @@
-/* MetricCards — RECALL / PRECISION / CITATION ACCURACY / CASES PASSED from the
-   agent's latest finished run, with the whole-point change vs the previous
-   finished run written as text (▲ / ▼ / ±). */
+/* MetricCards — RECALL / PRECISION / CITATION ACCURACY / TRACES PASSED from the
+   agent's latest finished full-set (scope `all`) run, with the whole-point change
+   vs the previous finished full-set run written as text (▲ / ▼ / ±). Single-case
+   runs never feed the cards. */
 "use client";
 
 import React from "react";
@@ -20,7 +21,7 @@ export function MetricCards({ agentId }: { agentId: string }) {
   const finished = React.useMemo(
     () =>
       (runsQ.data ?? [])
-        .filter(isFinished)
+        .filter((r) => isFinished(r) && r.scope === "all")
         .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at)),
     [runsQ.data],
   );

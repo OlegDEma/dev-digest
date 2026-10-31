@@ -1,27 +1,23 @@
-/* RecentRuns — "Recent eval runs · all agents": the 20 newest eval runs. A row
-   (or its agent link) opens that agent's Evals tab. */
+/* RecentRuns — "Recent eval runs · all agents": the 20 newest finished full-set
+   runs with recall / precision / citation as bars with value text. A row (or its
+   agent link) opens that agent's eval page. */
 "use client";
 
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import type { EvalRunStatus, EvalRunSummary } from "@devdigest/shared";
-import { formatPct, formatWhen, passText } from "@/lib/eval-format";
+import type { EvalRunSummary } from "@devdigest/shared";
+import { MetricBar } from "@/components/eval-metric-bar";
+import { formatWhen, passText } from "@/lib/eval-format";
 import { s } from "./styles";
 
 /** Rows shown (AC-57). */
 export const RECENT_LIMIT = 20;
 
-const STATUS_KEY: Record<EvalRunStatus, string> = {
-  running: "statusRunning",
-  done: "statusDone",
-  partial: "statusPartial",
-  failed: "statusFailed",
-};
-
 export function RecentRuns({ runs }: { runs: EvalRunSummary[] }) {
   const t = useTranslations("eval");
+  const td = useTranslations("evalDashboard");
   const router = useRouter();
   const rows = [...runs].sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at)).slice(0, RECENT_LIMIT);
 
@@ -46,7 +42,7 @@ export function RecentRuns({ runs }: { runs: EvalRunSummary[] }) {
           </thead>
           <tbody>
             {rows.map((r) => {
-              const href = `/agents/${r.agent_id}?tab=evals`;
+              const href = `/eval/${r.agent_id}`;
               return (
                 <tr key={r.id} style={s.tr} onClick={() => router.push(href)} data-testid="recent-run-row">
                   <td style={s.td}>
@@ -56,11 +52,17 @@ export function RecentRuns({ runs }: { runs: EvalRunSummary[] }) {
                   </td>
                   <td style={s.td}>{formatWhen(r.started_at)}</td>
                   <td style={s.td}>v{r.config.agent_version}</td>
-                  <td style={s.td}>{formatPct(r.metrics?.recall)}</td>
-                  <td style={s.td}>{formatPct(r.metrics?.precision)}</td>
-                  <td style={s.td}>{formatPct(r.metrics?.citation_accuracy)}</td>
+                  <td style={s.td}>
+                    <MetricBar value={r.metrics?.recall} />
+                  </td>
+                  <td style={s.td}>
+                    <MetricBar value={r.metrics?.precision} />
+                  </td>
+                  <td style={s.td}>
+                    <MetricBar value={r.metrics?.citation_accuracy} />
+                  </td>
                   <td style={s.td}>{passText(r)}</td>
-                  <td style={s.td}>{t(`evalsTab.${STATUS_KEY[r.status]}`)}</td>
+                  <td style={s.td}>{td(`status.${r.status}`)}</td>
                 </tr>
               );
             })}

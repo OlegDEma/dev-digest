@@ -7,7 +7,30 @@ import { ApiError } from "@/lib/api";
 
 const createMutate = vi.fn();
 let state: { data?: unknown; isPending: boolean; isError: boolean; error: Error | null };
-vi.mock("@/lib/hooks/evals", () => ({ useCreateEvalCase: () => ({ mutate: createMutate, ...state }) }));
+let draftState: { error: Error | null };
+const draftIds: Array<string | null | undefined> = [];
+vi.mock("@/lib/hooks/evals", () => ({
+  useCreateEvalCaseFromFinding: () => ({ mutate: createMutate, ...state }),
+  useEvalCaseDraft: (id: string | null | undefined) => {
+    draftIds.push(id);
+    return draftState;
+  },
+}));
+vi.mock("@/lib/hooks/agents", () => ({ useAgent: () => ({ data: { id: "ag1", name: "Security Reviewer" } }) }));
+vi.mock("@/components/eval-case-editor", () => ({
+  EvalCaseEditor: (p: {
+    agent: { id: string; name: string };
+    findingId: string;
+    onClose: () => void;
+    onSaved?: (c: unknown) => void;
+  }) => (
+    <div role="dialog" aria-label="case editor">
+      <span>{`editor for ${p.findingId} / ${p.agent.name}`}</span>
+      <button onClick={p.onClose}>close editor</button>
+      <button onClick={() => p.onSaved?.({ id: "c9", expected: [{ kind: "must_find" }] })}>save in editor</button>
+    </div>
+  ),
+}));
 
 import { EvalCaseAction } from "./EvalCaseAction";
 
@@ -32,6 +55,8 @@ const FINDING: FindingRecord = {
 
 beforeEach(() => {
   state = { isPending: false, isError: false, error: null };
+  draftState = { error: null };
+  draftIds.length = 0;
 });
 afterEach(() => {
   cleanup();
@@ -52,15 +77,47 @@ describe("EvalCaseAction", () => {
     expect(createMutate).toHaveBeenCalledWith("f1");
   });
 
-  it("is disabled with a hint while undecided", () => {
+  it("is enabled on an undecided finding and opens the editor from its draft, creating nothing (AC-D34, AC-D35a)", () => {
     mount({ ...FINDING, accepted_at: null });
-    expect(screen.getByRole("button", { name: "Turn into eval case" })).toBeDisabled();
-    expect(screen.getByText("Accept or dismiss first")).toBeInTheDocument();
+    const btn = screen.getByRole("button", { name: "Turn into eval case" });
+    expect(btn).toBeEnabled();
+    expect(screen.queryByText("Accept or dismiss first")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(btn);
+    expect(createMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "case editor" })).toHaveTextContent("editor for f1 / Security Reviewer");
+    expect(draftIds).toContain("f1");
+    fireEvent.click(screen.getByRole("button", { name: "close editor" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("confirms a case saved through the editor with the created message and the Evals link (W3)", () => {
+    mount({ ...FINDING, accepted_at: null });
+    fireEvent.click(screen.getByRole("button", { name: "Turn into eval case" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "save in editor" }));
+    fireEvent.click(screen.getByRole("button", { name: "close editor" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Eval case created (must_find)");
+    expect(screen.getByRole("link", { name: "View in Evals tab" })).toHaveAttribute("href", "/agents/ag1?tab=evals");
+  });
+
+  it("does not fetch a draft before the button is clicked", () => {
+    mount({ ...FINDING, accepted_at: null });
+    expect(draftIds.every((id) => id == null)).toBe(true);
+  });
+
+  it("shows 'Already an eval case' with a link instead of the editor on 409 eval_case_exists (AC-D35c)", () => {
+    draftState = { error: new ApiError("exists", 409, "eval_case_exists", { case_id: "c9" }) };
+    mount({ ...FINDING, accepted_at: null });
+    fireEvent.click(screen.getByRole("button", { name: "Turn into eval case" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Already an eval case");
+    expect(screen.getByRole("link", { name: "View in Evals tab" })).toHaveAttribute("href", "/agents/ag1?tab=evals");
   });
 
   it("links to the agent's Evals tab after creating", () => {
     state = {
-      data: { created: true, case: { expectation: { kind: "must_find" } } },
+      data: { created: true, case: { expected: [{ kind: "must_find" }] } },
       isPending: false,
       isError: false,
       error: null,

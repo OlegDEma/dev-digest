@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -47,6 +47,26 @@ export interface LinkedSkillRow {
   skill: typeof t.skills.$inferSelect;
   order: number;
 }
+
+/** A Drizzle transaction handle; the same builders as `Db`. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+type Runner = Db | Tx;
+
+/** What `promoteConfig` writes: run B's snapshot. Skills are in snapshot order. */
+export interface PromoteTarget {
+  provider: Provider;
+  model: string;
+  systemPrompt: string;
+  strategy: ReviewStrategy;
+  skills: { skillId: string; name: string }[];
+}
+
+export type PromoteGuardVerdict = 'ok' | 'agent_changed' | 'already_current';
+
+export type PromoteOutcome =
+  | { ok: true; row: AgentRow; from: number }
+  | { ok: false; reason: 'agent_not_found' | 'agent_changed' | 'already_current' }
+  | { ok: false; reason: 'skill_unavailable'; skills: string[] };
 
 export class AgentsRepository {
   constructor(private db: Db) {}
@@ -158,9 +178,9 @@ export class AgentsRepository {
     return row;
   }
 
-  private async snapshotVersion(row: AgentRow, version: number): Promise<void> {
-    const skills = await this.skillIdsForAgent(row.id);
-    await this.db
+  private async snapshotVersion(row: AgentRow, version: number, runner: Runner = this.db): Promise<void> {
+    const skills = await this.skillIdsForAgent(row.id, runner);
+    await runner
       .insert(t.agentVersions)
       .values({
         agentId: row.id,
@@ -202,18 +222,19 @@ export class AgentsRepository {
   // ---- agent_skills link table (A2 owns the agent side) -------------------
 
   /** Skills linked to an agent, in `order` ascending. */
-  async linkedSkills(agentId: string): Promise<LinkedSkillRow[]> {
-    const rows = await this.db
+  async linkedSkills(agentId: string, runner: Runner = this.db): Promise<LinkedSkillRow[]> {
+    const rows = await runner
       .select({ skill: t.skills, order: t.agentSkills.order })
       .from(t.agentSkills)
       .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
-      .where(eq(t.agentSkills.agentId, agentId))
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(and(eq(t.agentSkills.agentId, agentId), eq(t.skills.workspaceId, t.agents.workspaceId)))
       .orderBy(asc(t.agentSkills.order));
     return rows.map((r) => ({ skill: r.skill, order: r.order }));
   }
 
-  async skillIdsForAgent(agentId: string): Promise<string[]> {
-    const links = await this.linkedSkills(agentId);
+  async skillIdsForAgent(agentId: string, runner: Runner = this.db): Promise<string[]> {
+    const links = await this.linkedSkills(agentId, runner);
     return links.map((l) => l.skill.id);
   }
 
@@ -222,14 +243,31 @@ export class AgentsRepository {
    * globally enabled (`skills.enabled`), in link `order`. A bound-but-disabled
    * skill is left out here, which is what makes the card toggle a kill-switch.
    */
-  async enabledSkillsForPrompt(agentId: string): Promise<LinkedSkillRow[]> {
-    const rows = await this.db
+  async enabledSkillsForPrompt(agentId: string, runner: Runner = this.db): Promise<LinkedSkillRow[]> {
+    const rows = await runner
       .select({ skill: t.skills, order: t.agentSkills.order })
       .from(t.agentSkills)
       .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
-      .where(and(eq(t.agentSkills.agentId, agentId), eq(t.skills.enabled, true)))
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(
+        and(
+          eq(t.agentSkills.agentId, agentId),
+          eq(t.skills.enabled, true),
+          eq(t.skills.workspaceId, t.agents.workspaceId),
+        ),
+      )
       .orderBy(asc(t.agentSkills.order));
     return rows.map((r) => ({ skill: r.skill, order: r.order }));
+  }
+
+  /** Which of `ids` are skills of this workspace (a skill id from another workspace is never linkable). */
+  async skillIdsInWorkspace(workspaceId: string, ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.db
+      .select({ id: t.skills.id })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, ids)));
+    return new Set(rows.map((r) => r.id));
   }
 
   /** agent_id → number of bound skills, for every agent in the workspace with ≥1. */
@@ -271,5 +309,62 @@ export class AgentsRepository {
     await this.db
       .insert(t.agentSkills)
       .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+  }
+
+  /**
+   * Eval "Promote" (AC-D57/58): in ONE transaction, lock the agent row, let the
+   * pure `guard` judge the live config (stale / already current), check every
+   * target skill still exists, then write prompt/provider/model/strategy,
+   * version + 1, the exact ordered skill links and the version snapshot. Any
+   * failure rolls the whole thing back. Touches no other agent field.
+   */
+  async promoteConfig(
+    workspaceId: string,
+    agentId: string,
+    target: PromoteTarget,
+    guard: (live: { row: AgentRow; enabledSkills: LinkedSkillRow[] }) => PromoteGuardVerdict,
+  ): Promise<PromoteOutcome> {
+    return this.db.transaction(async (tx): Promise<PromoteOutcome> => {
+      const [row] = await tx
+        .select()
+        .from(t.agents)
+        .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, agentId)))
+        .for('update');
+      if (!row) return { ok: false, reason: 'agent_not_found' };
+
+      const verdict = guard({ row, enabledSkills: await this.enabledSkillsForPrompt(agentId, tx) });
+      if (verdict !== 'ok') return { ok: false, reason: verdict };
+
+      const wanted = target.skills.map((s) => s.skillId);
+      const existing = wanted.length
+        ? await tx
+            .select({ id: t.skills.id })
+            .from(t.skills)
+            .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, wanted)))
+        : [];
+      const have = new Set(existing.map((r) => r.id));
+      const missing = target.skills.filter((s) => !have.has(s.skillId)).map((s) => s.name);
+      if (missing.length > 0) return { ok: false, reason: 'skill_unavailable', skills: missing };
+
+      const nextVersion = row.version + 1;
+      const [updated] = await tx
+        .update(t.agents)
+        .set({
+          provider: target.provider,
+          model: target.model,
+          systemPrompt: target.systemPrompt,
+          strategy: target.strategy,
+          version: nextVersion,
+        })
+        .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.id, agentId)))
+        .returning();
+
+      await tx.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
+      if (wanted.length > 0) {
+        await tx.insert(t.agentSkills).values(wanted.map((skillId, i) => ({ agentId, skillId, order: i })));
+      }
+      await this.snapshotVersion(updated!, nextVersion, tx);
+      return { ok: true, row: updated!, from: row.version };
+    });
   }
 }

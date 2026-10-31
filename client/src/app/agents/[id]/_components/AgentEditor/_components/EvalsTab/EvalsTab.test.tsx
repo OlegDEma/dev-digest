@@ -1,10 +1,9 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/eval.json";
 import { ApiError } from "@/lib/api";
-import { formatWhen } from "@/lib/eval-format";
 import { makeCase, makeDetail, makeRun } from "@/lib/test-support/eval-fixtures";
 
 type Q = { data?: unknown; isLoading: boolean; isError: boolean; refetch: () => void };
@@ -25,6 +24,15 @@ vi.mock("@/lib/hooks/evals", () => ({
   },
   useStartEvalRun: () => ({ mutate: startMutate, isPending: false }),
   useDeleteEvalCase: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+}));
+
+vi.mock("@/components/eval-case-editor", () => ({
+  EvalCaseEditor: (p: { caseId?: string | null; onClose: () => void }) => (
+    <div role="dialog" aria-label="case editor">
+      <span>{`caseId=${p.caseId ?? "none"}`}</span>
+      <button onClick={p.onClose}>close editor</button>
+    </div>
+  ),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -136,22 +144,68 @@ describe("EvalsTab run controls", () => {
   });
 });
 
-describe("EvalsTab compare flow", () => {
-  it("opens the compare view for two selected runs; Escape closes it and keeps the selection (AC-54)", () => {
-    const a = makeRun({ id: "a", started_at: "2026-10-02T10:00:00.000Z" });
-    const b = makeRun({ id: "b", started_at: "2026-10-01T10:00:00.000Z" });
-    runsState = ok([a, b]);
-    runState = ok(makeDetail());
+describe("EvalsTab header and case actions", () => {
+  it("shows EVAL METRICS with a 'View full dashboard →' link to the agent's page (AC-D49)", () => {
     mount();
-    fireEvent.click(screen.getByRole("checkbox", { name: `Select run ${formatWhen(a.started_at)}` }));
-    fireEvent.click(screen.getByRole("checkbox", { name: `Select run ${formatWhen(b.started_at)}` }));
-    fireEvent.click(screen.getByRole("button", { name: "Compare" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    act(() => {
-      fireEvent.keyDown(document, { key: "Escape" });
-    });
+    expect(screen.getByRole("heading", { name: "EVAL METRICS" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View full dashboard →" })).toHaveAttribute("href", "/eval/ag1");
+  });
+
+  it("no longer renders run history or the compare flow (moved to the per-agent page)", () => {
+    runsState = ok([makeRun({ id: "a" }), makeRun({ id: "b" })]);
+    mount();
+    expect(screen.queryByText("Run history")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compare" })).toBeNull();
+  });
+
+  it("keeps 'New eval case' enabled at zero cases and opens an empty editor (AC-D1, AC-D40)", () => {
+    casesState = ok([]);
+    mount();
+    const btn = screen.getByRole("button", { name: "New eval case" });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    expect(screen.getByRole("dialog", { name: "case editor" })).toHaveTextContent("caseId=none");
+  });
+
+  it("puts Run all evals and New eval case on the cases heading line (AC-D41b)", () => {
+    mount();
+    const heading = screen.getByRole("heading", { name: "Eval cases" });
+    expect(heading.parentElement).toContainElement(screen.getByRole("button", { name: "Run all evals (8)" }));
+    expect(heading.parentElement).toContainElement(screen.getByRole("button", { name: "New eval case" }));
+  });
+
+  it("opens the editor on a row's edit button, loaded with that case (AC-D39)", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Edit case case-3" }));
+    expect(screen.getByRole("dialog", { name: "case editor" })).toHaveTextContent("caseId=c3");
+    fireEvent.click(screen.getByRole("button", { name: "close editor" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("checkbox", { name: `Select run ${formatWhen(a.started_at)}` })).toBeChecked();
-    expect(screen.getByRole("button", { name: "Compare" })).toBeEnabled();
+  });
+
+  it("starts a scope-case run from a row's run button (AC-D25)", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Run case case-2" }));
+    expect(startMutate).toHaveBeenCalledTimes(1);
+    expect(startMutate.mock.calls[0]![0]).toEqual({ case_id: "c2" });
+  });
+
+  it("starts a full run (no body) from Run all evals", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Run all evals (8)" }));
+    expect(startMutate.mock.calls[0]![0]).toBeUndefined();
+  });
+
+  it("disables Run all evals and every row run button while a run is queued (AC-D30)", () => {
+    runsState = ok([makeRun({ id: "q1", status: "queued", scope: "all", metrics: null, counts: null, progress: { done: 0, total: 8 } })]);
+    mount();
+    expect(screen.getByRole("button", { name: "Run all evals (8)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run case case-0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "New eval case" })).toBeEnabled();
+  });
+
+  it("disables run buttons while a single-case run is running (AC-D30)", () => {
+    runsState = ok([makeRun({ id: "s1", status: "running", scope: "case", metrics: null, counts: null, progress: { done: 0, total: 1 } })]);
+    mount();
+    expect(screen.getByRole("button", { name: "Run case case-0" })).toBeDisabled();
   });
 });

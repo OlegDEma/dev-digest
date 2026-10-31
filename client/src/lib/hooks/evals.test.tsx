@@ -3,7 +3,14 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { makeDetail } from "@/lib/test-support/eval-fixtures";
-import { useAgentEvalRuns, useEvalRun, useStartEvalRun } from "./evals";
+import {
+  useAgentEvalRuns,
+  useCreateEvalCase,
+  useEvalCaseDraft,
+  useEvalRun,
+  useStartEvalRun,
+  useUpdateEvalCase,
+} from "./evals";
 
 const fetchMock = vi.fn();
 
@@ -116,7 +123,7 @@ describe("useStartEvalRun (AC-22a, AC-30b)", () => {
     const { Wrapper } = wrapper();
     const { result } = renderHook(() => useStartEvalRun("ag1"), { wrapper: Wrapper });
     await act(async () => {
-      result.current.mutate();
+      result.current.mutate(undefined);
       await vi.advanceTimersByTimeAsync(0);
     });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -131,11 +138,141 @@ describe("useStartEvalRun (AC-22a, AC-30b)", () => {
     const { Wrapper } = wrapper();
     const { result } = renderHook(() => useStartEvalRun("ag1"), { wrapper: Wrapper });
     await act(async () => {
-      result.current.mutate();
+      result.current.mutate(undefined);
       await vi.advanceTimersByTimeAsync(0);
     });
     const err = result.current.error as unknown as { code: string; details: { run_id: string } };
     expect(err.code).toBe("eval_run_in_progress");
     expect(err.details.run_id).toBe("run9");
+  });
+});
+
+describe("case hooks and single-case runs (AC-D25, AC-D30, AC-D33b, AC-D35a)", () => {
+  const callOf = (i = 0) => fetchMock.mock.calls[i] as [string, RequestInit];
+
+  it("useStartEvalRun sends { case_id } as the body of a scope-case run", async () => {
+    fetchMock.mockImplementation(() => json(makeDetail({ status: "running", scope: "case" }), 202));
+    const { Wrapper } = wrapper();
+    const { result } = renderHook(() => useStartEvalRun("ag1"), { wrapper: Wrapper });
+    await act(async () => {
+      result.current.mutate({ case_id: "c1" });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(JSON.parse(callOf()[1].body as string)).toEqual({ case_id: "c1" });
+  });
+
+  it("useStartEvalRun sends no body for a full run", async () => {
+    fetchMock.mockImplementation(() => json(makeDetail({ status: "running" }), 202));
+    const { Wrapper } = wrapper();
+    const { result } = renderHook(() => useStartEvalRun("ag1"), { wrapper: Wrapper });
+    await act(async () => {
+      result.current.mutate(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(callOf()[1].body).toBeUndefined();
+  });
+
+  it("useAgentEvalRuns keeps polling while a run is queued, then invalidates once it settles", async () => {
+    const queued = makeDetail({ id: "r1", status: "queued" });
+    fetchMock
+      .mockImplementationOnce(() => json([queued]))
+      .mockImplementationOnce(() => json([{ ...queued, status: "running" }]))
+      .mockImplementation(() => json([{ ...queued, status: "done" }]));
+    const { client, Wrapper } = wrapper();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useAgentEvalRuns("ag1").data, { wrapper: Wrapper });
+    await tick(0);
+    await tick(4000); // queued -> running: still active, no invalidation
+    expect(spy).not.toHaveBeenCalled();
+    await tick(4000); // running -> done
+    const keys = spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey));
+    expect(keys).toContain('["eval-cases","ag1"]');
+  });
+
+  it("useEvalRun polls while the run is queued", async () => {
+    fetchMock
+      .mockImplementationOnce(() => json(makeDetail({ status: "queued" })))
+      .mockImplementation(() => json(makeDetail({ status: "done" })));
+    const { Wrapper } = wrapper();
+    renderHook(() => useEvalRun("run1").data, { wrapper: Wrapper });
+    await tick(0);
+    await tick(4300);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("useCreateEvalCase POSTs the case body to /agents/:id/eval-cases, with source_finding_id", async () => {
+    fetchMock.mockImplementation(() => json({ id: "c1" }, 201));
+    const { client, Wrapper } = wrapper();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useCreateEvalCase("ag1"), { wrapper: Wrapper });
+    const body = {
+      name: "n",
+      input_diff: "d",
+      input_files: [],
+      pr_meta: { title: "", description: "" },
+      expected: [],
+      source_finding_id: "00000000-0000-4000-8000-000000000001",
+    };
+    await act(async () => {
+      result.current.mutate(body);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const [url, init] = callOf();
+    expect(url).toMatch(/\/agents\/ag1\/eval-cases$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual(body);
+    expect(spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey))).toContain('["eval-cases","ag1"]');
+  });
+
+  it("useUpdateEvalCase PUTs to /eval-cases/:id", async () => {
+    fetchMock.mockImplementation(() => json({ id: "c1" }));
+    const { Wrapper } = wrapper();
+    const { result } = renderHook(() => useUpdateEvalCase("ag1"), { wrapper: Wrapper });
+    await act(async () => {
+      result.current.mutate({ id: "c1", body: { name: "n", input_diff: "d", input_files: [], pr_meta: { title: "", description: "" }, expected: [] } });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const [url, init] = callOf();
+    expect(url).toMatch(/\/eval-cases\/c1$/);
+    expect(init.method).toBe("PUT");
+  });
+
+  it("create/update are silentError (the editor shows the error inline); start-run is opt-in", async () => {
+    fetchMock.mockImplementation(() => json({ id: "c1" }));
+    const { client, Wrapper } = wrapper();
+    const body = { name: "n", input_diff: "d", input_files: [], pr_meta: { title: "", description: "" }, expected: [] };
+    const { result } = renderHook(
+      () => ({
+        create: useCreateEvalCase("ag1"),
+        update: useUpdateEvalCase("ag1"),
+        plain: useStartEvalRun("ag1"),
+        quiet: useStartEvalRun("ag1", { silentError: true }),
+      }),
+      { wrapper: Wrapper },
+    );
+    await act(async () => {
+      result.current.create.mutate(body);
+      result.current.update.mutate({ id: "c1", body });
+      result.current.plain.mutate(undefined);
+      result.current.quiet.mutate(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const metas = client.getMutationCache().getAll().map((m) => m.meta);
+    expect(metas).toEqual([{ silentError: true }, { silentError: true }, undefined, { silentError: true }]);
+  });
+
+  it("useEvalCaseDraft GETs the finding's draft only when given an id, and surfaces eval_case_exists", async () => {
+    fetchMock.mockImplementation(() =>
+      json({ error: { code: "eval_case_exists", message: "exists", details: { case_id: "c9" } } }, 409),
+    );
+    const { Wrapper } = wrapper();
+    const idle = renderHook(() => useEvalCaseDraft(null), { wrapper: Wrapper });
+    await tick(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    idle.unmount();
+    const { result } = renderHook(() => ({ e: useEvalCaseDraft("f1").error }), { wrapper: Wrapper });
+    await tick(0);
+    expect(callOf()[0]).toMatch(/\/findings\/f1\/eval-case-draft$/);
+    expect((result.current.e as unknown as { code: string }).code).toBe("eval_case_exists");
   });
 });

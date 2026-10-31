@@ -76,6 +76,28 @@ describe("MetricCards", () => {
     expect(within(screen.getByTestId("metric-citation_accuracy")).getByText("± 0 pt")).toBeInTheDocument();
   });
 
+  it("labels the fourth card TRACES PASSED (AC-D50)", () => {
+    runsState = { data: [makeRun()], isLoading: false, isError: false, refetch: vi.fn() };
+    renderCards();
+    expect(within(screen.getByTestId("metric-passed")).getByText("TRACES PASSED")).toBeInTheDocument();
+    expect(within(screen.getByTestId("metric-passed")).getByText("6/8")).toBeInTheDocument();
+  });
+
+  it("ignores single-case runs: cards, deltas and the traces count use full runs only (AC-D27)", () => {
+    const single = makeRun({
+      id: "single",
+      scope: "case",
+      started_at: "2026-10-05T10:00:00.000Z",
+      metrics: { recall: 0.1, precision: 0.1, strict_precision: 0.1, citation_accuracy: 0.1, macro_recall: 0.1, macro_precision: 0.1 },
+      counts: { ...makeRun().counts!, cases_passed: 1, cases_scored: 1 },
+    });
+    runsState = { data: [single, makeRun()], isLoading: false, isError: false, refetch: vi.fn() };
+    renderCards();
+    expect(within(screen.getByTestId("metric-recall")).getByText("66%")).toBeInTheDocument();
+    expect(within(screen.getByTestId("metric-passed")).getByText("6/8")).toBeInTheDocument();
+    expect(screen.queryByText(/[▲▼±]/)).toBeNull();
+  });
+
   it("shows no delta with only one finished run (AC-45b)", () => {
     runsState = { data: [makeRun()], isLoading: false, isError: false, refetch: vi.fn() };
     renderCards();

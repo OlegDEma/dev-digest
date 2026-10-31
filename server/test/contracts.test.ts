@@ -30,6 +30,16 @@ import {
   PrDetail,
   EvalCase,
   EvalExpectation,
+  EvalExpectedItem,
+  EvalExpectedList,
+  EvalCaseDraft,
+  EvalCaseDraftBody,
+  EVAL_INPUT_LIMITS,
+  EVAL_SCHEMA_CAPS,
+  StartEvalRunBody,
+  PromoteEvalBody,
+  EvalRunSummary,
+  EvalCounts,
   AgentManifest,
 } from '@devdigest/shared';
 
@@ -453,11 +463,17 @@ describe('Eval pipeline contracts', () => {
     owner_kind: 'agent' as const,
     owner_id: 'a1',
     name: 'null-deref',
-    expectation: { kind: 'must_find', file: 'src/a.ts', start_line: 3, end_line: 5 },
+    expected: [
+      { kind: 'must_find', file: 'src/a.ts', start_line: 3, end_line: 5, severity: 'WARNING', category: 'bug' },
+    ],
     display: { title: 'Null deref', severity: 'WARNING', category: 'bug' },
     input_diff: 'diff --git a/src/a.ts b/src/a.ts\n',
+    input_files: [{ path: 'src/ctx.ts', content: 'x' }],
+    pr_meta: { title: 'T', description: 'D' },
     source: { finding_id: 'f1', pr_number: 7, repo: 'o/r' },
+    revision: 1,
     created_at: '2026-10-29T00:00:00.000Z',
+    updated_at: '2026-10-29T00:00:00.000Z',
     last_result: null,
   });
 
@@ -471,6 +487,31 @@ describe('Eval pipeline contracts', () => {
     expect(EvalCase.safeParse(c).success).toBe(false);
   });
 
+  it('parses a hand-written EvalCase with null display and source, and an extended last_result', () => {
+    const c = EvalCase.parse({
+      ...evalCase(),
+      display: null,
+      source: null,
+      expected: [],
+      last_result: {
+        run_id: 'r1',
+        status: 'pass',
+        ran_at: '2026-10-29T00:00:00.000Z',
+        summary: 'expected 0 findings, got 0',
+        duration_ms: null,
+        cost_usd: null,
+        case_revision: 1,
+      },
+    });
+    expect(c.expected).toEqual([]);
+    expect(c.last_result?.case_revision).toBe(1);
+  });
+
+  it('rejects an EvalCase that still carries the old single expectation shape only', () => {
+    const { expected: _e, ...rest } = evalCase();
+    expect(EvalCase.safeParse({ ...rest, expectation: { kind: 'must_find', file: 'a', start_line: 1, end_line: 1 } }).success).toBe(false);
+  });
+
   it('rejects an EvalExpectation with end_line < start_line', () => {
     expect(
       EvalExpectation.safeParse({ kind: 'must_find', file: 'a.ts', start_line: 5, end_line: 4 }).success,
@@ -480,5 +521,160 @@ describe('Eval pipeline contracts', () => {
   it('parses an AgentManifest without post_as to github_review', () => {
     const m = AgentManifest.parse({ name: 'n', model: 'm', system_prompt: 'p' });
     expect(m.post_as).toBe('github_review');
+  });
+});
+
+describe('EvalExpectedItem (AC-D5, AC-D42, AC-D43, EC-D33)', () => {
+  const item = { file: 'src/a.ts', start_line: 3, severity: 'WARNING', category: 'bug' };
+
+  it('defaults kind to must_find and leaves end_line absent', () => {
+    const parsed = EvalExpectedItem.parse(item);
+    expect(parsed.kind).toBe('must_find');
+    expect(parsed.end_line).toBeUndefined();
+  });
+
+  it('rejects an unknown key', () => {
+    expect(EvalExpectedItem.safeParse({ ...item, extra: 1 }).success).toBe(false);
+  });
+
+  it('rejects a lowercase severity and an uppercase category', () => {
+    expect(EvalExpectedItem.safeParse({ ...item, severity: 'critical' }).success).toBe(false);
+    expect(EvalExpectedItem.safeParse({ ...item, category: 'Bug' }).success).toBe(false);
+  });
+
+  it('requires severity and category for must_find', () => {
+    const { severity: _s, ...noSeverity } = item;
+    const { category: _c, ...noCategory } = item;
+    expect(EvalExpectedItem.safeParse(noSeverity).success).toBe(false);
+    expect(EvalExpectedItem.safeParse(noCategory).success).toBe(false);
+  });
+
+  it('allows a location-only must_not_flag', () => {
+    expect(EvalExpectedItem.safeParse({ kind: 'must_not_flag', file: 'a.ts', start_line: 1 }).success).toBe(true);
+  });
+
+  it('rejects end_line < start_line, start_line < 1, an empty file and a title over 200', () => {
+    expect(EvalExpectedItem.safeParse({ ...item, end_line: 2 }).success).toBe(false);
+    expect(EvalExpectedItem.safeParse({ ...item, start_line: 0 }).success).toBe(false);
+    expect(EvalExpectedItem.safeParse({ ...item, file: '' }).success).toBe(false);
+    expect(EvalExpectedItem.safeParse({ ...item, title: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('an empty list is valid (silent case)', () => {
+    expect(EvalExpectedList.parse([])).toEqual([]);
+  });
+});
+
+describe('Eval parity request/response contracts', () => {
+  it('EvalCaseDraft is strict and enforces the name pattern', () => {
+    const draft = {
+      name: 'null-deref',
+      input_diff: 'd',
+      input_files: [],
+      pr_meta: { title: '', description: '' },
+      expected: [],
+    };
+    expect(EvalCaseDraft.safeParse(draft).success).toBe(true);
+    expect(EvalCaseDraft.safeParse({ ...draft, name: 'Bad Name' }).success).toBe(false);
+    expect(EvalCaseDraft.safeParse({ ...draft, extra: 1 }).success).toBe(false);
+  });
+
+  it('StartEvalRunBody is optional and takes a uuid case_id', () => {
+    expect(StartEvalRunBody.safeParse(undefined).success).toBe(true);
+    expect(StartEvalRunBody.safeParse({}).success).toBe(true);
+    expect(StartEvalRunBody.safeParse({ case_id: 'nope' }).success).toBe(false);
+    expect(StartEvalRunBody.safeParse({ case_id: '5f1d6a52-6bb4-4d49-9fb9-2d0d7d6c2e11' }).success).toBe(true);
+  });
+
+  it('PromoteEvalBody needs a uuid run_id and an expected_config_id', () => {
+    expect(PromoteEvalBody.safeParse({ run_id: '5f1d6a52-6bb4-4d49-9fb9-2d0d7d6c2e11', expected_config_id: 'abc' }).success).toBe(true);
+    expect(PromoteEvalBody.safeParse({ run_id: 'x', expected_config_id: 'abc' }).success).toBe(false);
+  });
+
+  it('EvalRunSummary accepts queued status and requires scope', () => {
+    const base = {
+      id: 'r',
+      agent_id: 'a',
+      agent_name: 'A',
+      status: 'queued',
+      scope: 'all',
+      started_at: '2026-10-31T00:00:00.000Z',
+      finished_at: null,
+      progress: { done: 0, total: 1 },
+      config: {
+        agent_version: 1,
+        config_id: 'c',
+        provider: 'openai',
+        model: 'm',
+        system_prompt: 'p',
+        strategy: 'single-pass',
+        skills: [],
+      },
+      case_ids: [],
+      metrics: null,
+      counts: null,
+      cost_usd: null,
+      duration_ms: null,
+      error: null,
+    };
+    expect(EvalRunSummary.safeParse(base).success).toBe(true);
+    const { scope: _scope, ...noScope } = base;
+    expect(EvalRunSummary.safeParse(noScope).success).toBe(false);
+  });
+});
+
+describe('EvalCaseDraftBody outer caps (S-2)', () => {
+  const body = () => ({
+    name: 'ok',
+    input_diff: 'd',
+    input_files: [] as { path: string; content: string }[],
+    pr_meta: { title: '', description: '' },
+    expected: [] as unknown,
+  });
+  const ok = (b: unknown) => EvalCaseDraftBody.safeParse(b).success;
+
+  it('caps sit above the spec limits', () => {
+    expect(EVAL_SCHEMA_CAPS.filesCount).toBeGreaterThan(EVAL_INPUT_LIMITS.filesCount);
+    expect(EVAL_SCHEMA_CAPS.prTitle).toBeGreaterThan(EVAL_INPUT_LIMITS.prTitleChars);
+    expect(EVAL_SCHEMA_CAPS.prDescription).toBeGreaterThan(EVAL_INPUT_LIMITS.prDescriptionChars);
+    expect(EVAL_SCHEMA_CAPS.fileChars).toBeGreaterThan(EVAL_INPUT_LIMITS.fileBytes);
+    expect(EVAL_SCHEMA_CAPS.diffChars).toBeGreaterThan(EVAL_INPUT_LIMITS.diffBytes);
+  });
+
+  it('values just over the spec limits still parse (the service gives the coded 422)', () => {
+    const b = body();
+    b.name = 'a'.repeat(61);
+    b.input_files = Array.from({ length: EVAL_INPUT_LIMITS.filesCount + 1 }, (_, i) => ({ path: `f${i}`, content: 'x' }));
+    b.pr_meta = { title: 'x'.repeat(201), description: 'x'.repeat(8001) };
+    b.input_diff = 'x'.repeat(EVAL_INPUT_LIMITS.diffBytes + 1);
+    expect(ok(b)).toBe(true);
+    expect(ok({ ...body(), input_files: [{ path: 'p'.repeat(301), content: 'x'.repeat(EVAL_INPUT_LIMITS.fileBytes + 1) }] })).toBe(true);
+  });
+
+  it('absurd input is rejected by the schema', () => {
+    expect(ok({ ...body(), name: 'a'.repeat(EVAL_SCHEMA_CAPS.name + 1) })).toBe(false);
+    expect(ok({ ...body(), input_files: Array.from({ length: EVAL_SCHEMA_CAPS.filesCount + 1 }, () => ({ path: 'a', content: '' })) })).toBe(false);
+    expect(ok({ ...body(), input_files: [{ path: 'p'.repeat(EVAL_SCHEMA_CAPS.filePath + 1), content: '' }] })).toBe(false);
+    expect(ok({ ...body(), input_files: [{ path: 'a', content: 'x'.repeat(EVAL_SCHEMA_CAPS.fileChars + 1) }] })).toBe(false);
+    expect(ok({ ...body(), pr_meta: { title: 'x'.repeat(EVAL_SCHEMA_CAPS.prTitle + 1), description: '' } })).toBe(false);
+    expect(ok({ ...body(), pr_meta: { title: '', description: 'x'.repeat(EVAL_SCHEMA_CAPS.prDescription + 1) } })).toBe(false);
+    expect(ok({ ...body(), input_diff: 'x'.repeat(EVAL_SCHEMA_CAPS.diffChars + 1) })).toBe(false);
+    expect(ok({ ...body(), expected: new Array(EVAL_SCHEMA_CAPS.expectedCount + 1).fill({}) })).toBe(false);
+  });
+
+  it('a non-array expected still parses (the service reports invalid_expected_output)', () => {
+    expect(ok({ ...body(), expected: { not: 'a list' } })).toBe(true);
+  });
+});
+
+describe('EvalCounts back-compat (W1)', () => {
+  it('counts stored without silent_total parse to 0', () => {
+    const legacy = {
+      cases_total: 1, cases_scored: 1, cases_passed: 1, cases_failed: 0, cases_error: 0,
+      must_find_total: 1, must_not_flag_total: 0, tp: 1, fn: 0, forbidden_hits: 0,
+      unlabelled: 0, emitted: 1, grounded: 1, dropped: 0,
+    };
+    expect(EvalCounts.parse(legacy).silent_total).toBe(0);
+    expect(EvalCounts.parse({ ...legacy, silent_total: 3 }).silent_total).toBe(3);
   });
 });

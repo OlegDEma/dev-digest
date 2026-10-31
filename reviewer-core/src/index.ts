@@ -19,6 +19,7 @@ export {
   sanitizeSourceLabel,
   renderProjectContextDoc,
   type ProjectContextDocInput,
+  type ReviewContextFile,
   type PromptParts,
   type AssembledPrompt,
   type ReviewPromptSection,

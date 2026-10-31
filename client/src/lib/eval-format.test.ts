@@ -8,6 +8,9 @@ import {
   formatCostDelta,
   formatDelta,
   formatPct,
+  isFinished,
+  metricBand,
+  formatPoints,
   lineDiff,
 } from "./eval-format";
 
@@ -100,8 +103,30 @@ describe("configDiff (AC-52a)", () => {
 
 describe("caseSetDiff (AC-53)", () => {
   it("counts added and removed cases", () => {
-    expect(caseSetDiff(["a", "b"], ["b", "c", "d"])).toEqual({ added: 2, removed: 1 });
-    expect(caseSetDiff(["a"], ["a"])).toEqual({ added: 0, removed: 0 });
+    expect(caseSetDiff(["a", "b"], ["b", "c", "d"])).toEqual({ added: 2, removed: 1, edited: 0 });
+    expect(caseSetDiff(["a"], ["a"])).toEqual({ added: 0, removed: 0, edited: 0 });
+  });
+  it("counts a case present in both runs with a different scored revision as edited (AC-D53)", () => {
+    expect(
+      caseSetDiff(
+        [{ key: "a", revision: 1 }, { key: "b", revision: 2 }],
+        [{ key: "a", revision: 2 }, { key: "b", revision: 2 }, { key: "c", revision: 1 }],
+      ),
+    ).toEqual({ added: 1, removed: 0, edited: 1 });
+  });
+});
+
+describe("metricBand / formatPoints (AC-D64, AC-D67)", () => {
+  it("bands at 0.8 and 0.5", () => {
+    expect(metricBand(0.8)).toBe("good");
+    expect(metricBand(0.79)).toBe("warn");
+    expect(metricBand(0.5)).toBe("warn");
+    expect(metricBand(0.49)).toBe("bad");
+  });
+  it("writes the sign as text", () => {
+    expect(formatPoints(3)).toBe("▲ 3 pt");
+    expect(formatPoints(-3)).toBe("▼ 3 pt");
+    expect(formatPoints(0)).toBe("± 0 pt");
   });
 });
 
@@ -111,5 +136,15 @@ describe("configChanged (AC-47)", () => {
     expect(configChanged({ config: cfg({ agent_version: 2, config_id: "c2" }) }, { config: cfg() })).toBe(false);
     expect(configChanged({ config: cfg() }, { config: cfg() })).toBe(false);
     expect(configChanged({ config: cfg() }, undefined)).toBe(false);
+  });
+});
+
+describe("isFinished (AC-D27)", () => {
+  it("is true for done and partial only; queued, running and failed are not finished", () => {
+    expect(isFinished({ status: "done" })).toBe(true);
+    expect(isFinished({ status: "partial" })).toBe(true);
+    expect(isFinished({ status: "queued" })).toBe(false);
+    expect(isFinished({ status: "running" })).toBe(false);
+    expect(isFinished({ status: "failed" })).toBe(false);
   });
 });

@@ -50,7 +50,7 @@ owns I/O sequencing and persistence + observability — but not the algorithm
 - Construct from the container: `new ReviewService(container)`; the service then
   builds its repository (`new ReviewRepository(container.db)`) and reaches ports
   via `container.llm(...)`, `container.github()`, `container.repoIntel`.
-- `evals/executor.ts` is a second sanctioned fire-and-forget executor (row inserted `running` first, `.catch` writes `failed` on the row, boot reaper in `app.ts`).
+- `evals/executor.ts` is a second sanctioned fire-and-forget executor (row inserted `running` — or `queued` for a batch run waiting in the timer-free `EvalBatchQueue` — first, `.catch` writes `failed` on the row, boot reaper in `app.ts` fails both `running` and `queued`).
 - `reviews/run-executor.ts` is the pattern for heavy background work extracted
   out of the service: "The service owns only I/O … and persistence + observability."
   It calls `reviewPullRequest(...)` from `@devdigest/reviewer-core` — application
@@ -132,6 +132,8 @@ same PR, with a reason.
 | `history` | `reviews` | review history views |
 | `repos` | `repo-intel` | enqueues index/refresh jobs |
 | `evals` | `reviews` | `loadDiff` + `PullRow` type for case creation |
+| `evals` | `agents` | `toAgentDto` for the Promote response (`agents/index.ts` publishes only that) |
+| `agents` (`repository/agent-stats.repo.ts`) | PR-run tables (`agent_runs`, `reviews`, `findings`) | read-only cross-table stats query, same precedent as `skills/repository.ts` |
 | `ci` | `repos` | connected-repo check via `RepoRepository` |
 | any | `_shared/` | route helpers (`getContext`, `IdParams`) |
 

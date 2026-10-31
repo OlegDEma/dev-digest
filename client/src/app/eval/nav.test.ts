@@ -16,4 +16,8 @@ describe("Eval Dashboard nav item", () => {
     expect(activeKeyFor("/eval")).toBe("eval");
     expect(activeKeyFor("/agents/ag1")).toBe("agents");
   });
+
+  it("stays highlighted on a per-agent eval page (D14)", () => {
+    expect(activeKeyFor("/eval/ag1")).toBe("eval");
+  });
 });

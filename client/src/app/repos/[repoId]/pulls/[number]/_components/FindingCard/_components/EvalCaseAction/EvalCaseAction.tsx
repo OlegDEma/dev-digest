@@ -1,22 +1,31 @@
-/* EvalCaseAction — "Turn into eval case" for a decided finding of a review that
-   has a producing agent. Accepted → must_find, dismissed → must_not_flag (the
-   server decides the kind). The outcome message names the kind and links to the
-   agent's Evals tab; server errors render as plain text. */
+/* EvalCaseAction — "Turn into eval case" for a finding of a review that has a
+   producing agent; always enabled. A decided finding becomes a case in one
+   click (accepted → must_find, dismissed → must_not_flag; the server decides the
+   kind). An undecided one opens the case editor prefilled from the finding's
+   draft — nothing is saved until Save; if a case already exists the editor is
+   replaced by "Already an eval case". Server errors render as plain text. */
 "use client";
 
 import React from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Button } from "@devdigest/ui";
-import type { FindingRecord } from "@devdigest/shared";
+import type { EvalCase, FindingRecord } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
-import { useCreateEvalCase } from "@/lib/hooks/evals";
+import { EvalCaseEditor } from "@/components/eval-case-editor";
+import { useAgent } from "@/lib/hooks/agents";
+import { useCreateEvalCaseFromFinding, useEvalCaseDraft } from "@/lib/hooks/evals";
 import { s } from "./styles";
 
 export function EvalCaseAction({ finding, agentId }: { finding: FindingRecord; agentId: string }) {
   const t = useTranslations("eval");
-  const create = useCreateEvalCase();
+  const create = useCreateEvalCaseFromFinding();
+  const [editing, setEditing] = React.useState(false);
+  const [savedCase, setSavedCase] = React.useState<EvalCase | null>(null);
+  const agentQ = useAgent(editing ? agentId : null);
+  const draftQ = useEvalCaseDraft(editing ? finding.id : null);
   const decided = !!finding.accepted_at || !!finding.dismissed_at;
+  const caseExists = editing && draftQ.error instanceof ApiError && draftQ.error.code === "eval_case_exists";
   const evalsHref = `/agents/${agentId}?tab=evals`;
 
   const errorText = (err: Error) =>
@@ -30,16 +39,39 @@ export function EvalCaseAction({ finding, agentId }: { finding: FindingRecord; a
         kind="ghost"
         size="sm"
         icon="FlaskConical"
-        disabled={!decided || create.isPending}
-        onClick={() => create.mutate(finding.id)}
+        disabled={create.isPending}
+        onClick={() => (decided ? create.mutate(finding.id) : setEditing(true))}
       >
         {t("findingCard.turnIntoCase")}
       </Button>
-      {!decided && <span style={s.hint}>{t("findingCard.decideFirst")}</span>}
+      {caseExists && (
+        <div role="status" style={s.result}>
+          {t("findingCard.alreadyCase")}
+          <Link href={evalsHref} style={s.link}>
+            {t("findingCard.viewEvals")}
+          </Link>
+        </div>
+      )}
+      {editing && !caseExists && (
+        <EvalCaseEditor
+          agent={{ id: agentId, name: agentQ.data?.name ?? "" }}
+          findingId={finding.id}
+          onClose={() => setEditing(false)}
+          onSaved={setSavedCase}
+        />
+      )}
+      {savedCase && !create.data && !caseExists && (
+        <div role="status" style={s.result}>
+          {t("findingCard.created", { kind: savedCase.expected[0]?.kind ?? "must_find" })}
+          <Link href={evalsHref} style={s.link}>
+            {t("findingCard.viewEvals")}
+          </Link>
+        </div>
+      )}
       {create.data && (
         <div role="status" style={s.result}>
           {create.data.created
-            ? t("findingCard.created", { kind: create.data.case.expectation.kind })
+            ? t("findingCard.created", { kind: create.data.case.expected[0]?.kind ?? "must_find" })
             : t("findingCard.alreadyCase")}
           <Link href={evalsHref} style={s.link}>
             {t("findingCard.viewEvals")}

@@ -30,3 +30,4 @@ export * from './contracts/productionize.js';
 export * from './contracts/project-context.js';
 export * from './contracts/onboarding.js';
 export * from './adapters.js';
+export * from './eval-diff.js';

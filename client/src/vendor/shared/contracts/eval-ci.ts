@@ -4,13 +4,17 @@ import {
   EvalRun,
   EvalOwnerKind,
   EvalCase,
-  EvalExpectation,
+  EvalExpectedList,
+  EvalCaseInputFile,
+  EvalPrMeta,
   EvalCaseStatus,
   Conformance,
   Provider,
   ReviewStrategy,
   CiFailOn,
+  Agent,
 } from './knowledge.js';
+import { EVAL_SCHEMA_CAPS } from '../eval-diff.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -107,8 +111,53 @@ export const CreateEvalCaseResponse = z.object({
 });
 export type CreateEvalCaseResponse = z.infer<typeof CreateEvalCaseResponse>;
 
-export const EvalRunStatus = z.enum(['running', 'done', 'partial', 'failed']);
+/** A shape-only body for create/update; the service applies the coded domain validation (EvalCaseDraft rules). */
+export const EvalCaseDraftBody = z.object({
+  name: z.string().max(EVAL_SCHEMA_CAPS.name),
+  input_diff: z.string().max(EVAL_SCHEMA_CAPS.diffChars),
+  input_files: z
+    .array(
+      z.object({
+        path: z.string().max(EVAL_SCHEMA_CAPS.filePath),
+        content: z.string().max(EVAL_SCHEMA_CAPS.fileChars),
+      }),
+    )
+    .max(EVAL_SCHEMA_CAPS.filesCount),
+  pr_meta: z.object({
+    title: z.string().max(EVAL_SCHEMA_CAPS.prTitle),
+    description: z.string().max(EVAL_SCHEMA_CAPS.prDescription),
+  }),
+  expected: z
+    .unknown()
+    .refine((v) => !Array.isArray(v) || v.length <= EVAL_SCHEMA_CAPS.expectedCount, {
+      message: `expected may hold at most ${EVAL_SCHEMA_CAPS.expectedCount} items`,
+    }),
+});
+export type EvalCaseDraftBody = z.infer<typeof EvalCaseDraftBody>;
+
+/** Body of `POST /agents/:id/eval-cases`; `source_finding_id` links the case to a finding. */
+export const CreateEvalCaseBody = EvalCaseDraftBody.extend({
+  source_finding_id: z.string().uuid().optional(),
+});
+export type CreateEvalCaseBody = z.infer<typeof CreateEvalCaseBody>;
+
+/** A validated case draft — also the response of `GET /findings/:id/eval-case-draft`. */
+export const EvalCaseDraft = z
+  .object({
+    name: z.string().regex(/^[a-z0-9-]{1,60}$/),
+    input_diff: z.string(),
+    input_files: z.array(EvalCaseInputFile),
+    pr_meta: EvalPrMeta,
+    expected: EvalExpectedList,
+  })
+  .strict();
+export type EvalCaseDraft = z.infer<typeof EvalCaseDraft>;
+
+export const EvalRunStatus = z.enum(['queued', 'running', 'done', 'partial', 'failed']);
 export type EvalRunStatus = z.infer<typeof EvalRunStatus>;
+
+export const EvalRunScope = z.enum(['all', 'case']);
+export type EvalRunScope = z.infer<typeof EvalRunScope>;
 
 /** Agent config captured once at run start; `config_id` is equal iff every other field is. */
 export const EvalConfigSnapshot = z.object({
@@ -146,6 +195,8 @@ export const EvalCounts = z.object({
   cases_error: Count,
   must_find_total: Count,
   must_not_flag_total: Count,
+  /** Absent on runs finished before silent cases existed; reads as 0. */
+  silent_total: Count.default(0),
   tp: Count,
   fn: Count,
   forbidden_hits: Count,
@@ -161,6 +212,7 @@ export const EvalRunSummary = z.object({
   agent_id: z.string(),
   agent_name: z.string(),
   status: EvalRunStatus,
+  scope: EvalRunScope,
   started_at: z.string(),
   finished_at: z.string().nullable(),
   progress: z.object({ done: z.number().int(), total: z.number().int() }),
@@ -181,7 +233,10 @@ export const EvalCaseResult = z.object({
   /** null once the case is deleted (FK set null); `case_name` keeps the run-time name. */
   case_id: z.string().nullable(),
   case_name: z.string(),
-  expectation: EvalExpectation,
+  /** The expected list as scored at run time. */
+  expected: EvalExpectedList,
+  /** Revision of the case content that was scored. */
+  case_revision: z.number().int(),
   status: EvalCaseStatus,
   findings: z.array(
     z.object({
@@ -216,12 +271,112 @@ export const EvalDashboardOverview = z.object({
       model: z.string(),
       enabled: z.boolean(),
       cases_total: z.number().int(),
-      last_run: EvalRunSummary.nullable(),
+      /** Recall of up to the last 10 finished full-set runs, oldest to newest; null recalls omitted. */
+      sparkline: z.array(z.number()),
+      /** Newest finished full-set run. */
+      last_full_run: EvalRunSummary.nullable(),
     }),
   ),
   recent_runs: z.array(EvalRunSummary),
 });
 export type EvalDashboardOverview = z.infer<typeof EvalDashboardOverview>;
+
+/** Body of `POST /agents/:id/eval-runs`: `case_id` makes it a scope-`case` run. */
+export const StartEvalRunBody = z.object({ case_id: z.string().uuid().optional() }).optional();
+export type StartEvalRunBody = z.infer<typeof StartEvalRunBody>;
+
+export const EvalBatchItem = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  run_id: z.string(),
+  cases: z.number().int(),
+});
+export type EvalBatchItem = z.infer<typeof EvalBatchItem>;
+
+export const EvalBatchSkipReason = z.enum([
+  'disabled',
+  'no_eval_cases',
+  'eval_run_in_progress',
+  'provider_not_configured',
+]);
+export type EvalBatchSkipReason = z.infer<typeof EvalBatchSkipReason>;
+
+export const EvalBatchSkip = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  reason: EvalBatchSkipReason,
+});
+export type EvalBatchSkip = z.infer<typeof EvalBatchSkip>;
+
+/** Response of `POST /eval-runs/batch`. */
+export const EvalBatchResult = z.object({
+  started: z.array(EvalBatchItem),
+  queued: z.array(EvalBatchItem),
+  skipped: z.array(EvalBatchSkip),
+});
+export type EvalBatchResult = z.infer<typeof EvalBatchResult>;
+
+// ---- Per-agent eval dashboard ----
+
+export const EvalRange = z.enum(['7d', '30d', '90d']);
+export type EvalRange = z.infer<typeof EvalRange>;
+
+export const EvalSeriesPoint = z.object({
+  run_id: z.string(),
+  ran_at: z.string(),
+  agent_version: z.number().int(),
+  recall: Ratio,
+  precision: Ratio,
+  citation_accuracy: Ratio,
+});
+export type EvalSeriesPoint = z.infer<typeof EvalSeriesPoint>;
+
+export const EvalMetricName = z.enum(['recall', 'precision', 'citation_accuracy']);
+export type EvalMetricName = z.infer<typeof EvalMetricName>;
+
+/** Whole-point change of a metric between the previous and latest full run. */
+export const EvalMetricDelta = z.object({
+  metric: EvalMetricName,
+  points: z.number().int(),
+});
+export type EvalMetricDelta = z.infer<typeof EvalMetricDelta>;
+
+export const EvalRegression = z.object({
+  agent_version: z.number().int(),
+  drops: z.array(EvalMetricDelta),
+  rises: z.array(EvalMetricDelta),
+  forbidden_hits_delta: z.number().int(),
+  fn_delta: z.number().int(),
+});
+export type EvalRegression = z.infer<typeof EvalRegression>;
+
+export const AgentEvalDashboardQuery = z.object({ range: EvalRange.default('30d') });
+export type AgentEvalDashboardQuery = z.infer<typeof AgentEvalDashboardQuery>;
+
+export const AgentEvalDashboard = z.object({
+  agent: z.object({ id: z.string(), name: z.string(), model: z.string() }),
+  range: EvalRange,
+  latest: EvalRunSummary.nullable(),
+  previous: EvalRunSummary.nullable(),
+  series: z.array(EvalSeriesPoint),
+  runs: z.array(EvalRunSummary),
+  regression: EvalRegression.nullable(),
+});
+export type AgentEvalDashboard = z.infer<typeof AgentEvalDashboard>;
+
+// ---- Promote ----
+
+export const PromoteEvalBody = z.object({
+  run_id: z.string().uuid(),
+  expected_config_id: z.string(),
+});
+export type PromoteEvalBody = z.infer<typeof PromoteEvalBody>;
+
+export const PromoteEvalResult = z.object({
+  agent: Agent,
+  version: z.number().int(),
+});
+export type PromoteEvalResult = z.infer<typeof PromoteEvalResult>;
 
 // ===========================================================================
 // Compose Review

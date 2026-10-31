@@ -110,9 +110,11 @@ and the known deviations we are paying down.
      durable row first, failure recorded, reaper — is what makes it safe; do
      not flag it, and do not copy the pattern without all three. The **eval-run
      executor** is sanctioned on the same terms (`evals/service.ts` →
-     `evals/executor.ts`): its `eval_runs` row is inserted `running` *before*
-     the fire, the `.catch` writes `failed` + the message onto that row, and
-     `app.ts` reaps stale `running` rows on boot (`EvalService.reapStaleRuns`).
+     `evals/executor.ts`): its `eval_runs` row is inserted `running` (or
+     `queued`, for a batch run waiting in the in-process `EvalBatchQueue`,
+     which holds no timers) *before* the fire, the `.catch` writes `failed` +
+     the message onto that row, and `app.ts` reaps stale `running` **and
+     `queued`** rows on boot (`EvalService.reapStaleRuns`).
 
 9. **A module's `index.ts` is its public API, not a back door.** Crossing into
    another module through its barrel is allowed only for what that module
@@ -149,7 +151,7 @@ and the known deviations we are paying down.
     | `conventions` | `repo-intel`, `settings` |
     | `history` | `reviews` |
     | `repos` | `repo-intel` |
-    | `evals` | `reviews` (`loadDiff` + `PullRow` type for case creation) |
+    | `evals` | `reviews` (`loadDiff` + `PullRow` type for case creation), `agents` (`toAgentDto` for the Promote response, via `agents/index.ts`) |
     | `ci` | `repos` (connected-repo check via `RepoRepository`) |
     | any module | `_shared/` |
     | every other pair | — (forbidden) |

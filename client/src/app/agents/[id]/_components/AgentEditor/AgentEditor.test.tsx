@@ -22,6 +22,9 @@ vi.mock("../../../../../lib/hooks/evals", () => ({
   useDeleteEvalCase: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
 }));
 
+vi.mock("../../../../../lib/hooks/agent-stats", () => ({
+  useAgentStats: () => ({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() }),
+}));
 vi.mock("../../../../../lib/hooks/ci", () => ({
   useCiInstallations: () => ({ data: [], isLoading: false, isError: false }),
   useExportCi: () => ({ mutate: vi.fn(), isPending: false, isError: false, data: undefined }),
@@ -66,16 +69,22 @@ describe("A2 Agent Editor (smoke)", () => {
     expect(screen.getByText("Save agent")).toBeInTheDocument();
   });
 
-  it("lists the Evals tab right after Context and CI right after Evals (AC-14a, AC-B1)", () => {
+  it("lists tabs Config, Skills, Context, Evals, Stats, CI in order (AC-D85)", () => {
     renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
-    const names = screen.getAllByRole("button").slice(0, 5).map((el) => el.textContent?.trim());
-    expect(names).toEqual(["Config", "Skills", "Context", "Evals", "CI"]);
+    const names = screen.getAllByRole("button").slice(0, 6).map((el) => el.textContent?.trim());
+    expect(names).toEqual(["Config", "Skills", "Context", "Evals", "Stats", "CI"]);
   });
 
   it("renders the Evals tab content for tab=evals (AC-14a)", () => {
     renderWithIntl(<AgentEditor agent={AGENT} tab="evals" onTab={() => {}} />);
     expect(screen.getByRole("button", { name: "Run all evals (0)" })).toBeInTheDocument();
     expect(screen.getByText("Eval cases")).toBeInTheDocument();
+  });
+
+  it("renders the Stats tab content for tab=stats (AC-D85)", () => {
+    renderWithIntl(<AgentEditor agent={AGENT} tab="stats" onTab={() => {}} />);
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText("Configuration")).not.toBeInTheDocument();
   });
 
   it("renders the CI tab content for tab=ci (AC-B1)", () => {

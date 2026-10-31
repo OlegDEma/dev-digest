@@ -9,7 +9,12 @@ import { ApiError } from "@/lib/api";
 const createMutate = vi.fn();
 let createState: { data?: unknown; isPending: boolean; isError: boolean; error: Error | null };
 vi.mock("@/lib/hooks/evals", () => ({
-  useCreateEvalCase: () => ({ mutate: createMutate, ...createState }),
+  useCreateEvalCaseFromFinding: () => ({ mutate: createMutate, ...createState }),
+  useEvalCaseDraft: () => ({ error: null }),
+}));
+vi.mock("@/lib/hooks/agents", () => ({ useAgent: () => ({ data: { id: "ag1", name: "Security Reviewer" } }) }));
+vi.mock("@/components/eval-case-editor", () => ({
+  EvalCaseEditor: () => <div role="dialog" aria-label="case editor" />,
 }));
 
 import { FindingCard } from "./FindingCard";
@@ -81,14 +86,18 @@ const CASE = {
   owner_kind: "agent",
   owner_id: "ag1",
   name: "x",
-  expectation: { kind: "must_find", file: "src/config.ts", start_line: 11, end_line: 11 },
+  expected: [{ kind: "must_find", file: "src/config.ts", start_line: 11, end_line: 11 }],
 };
 
 describe("FindingCard: Turn into eval case", () => {
-  it("is disabled with a hint while the finding is undecided (AC-11a)", () => {
+  it("is enabled while the finding is undecided and opens the editor (AC-D34, AC-D35a)", () => {
     renderWithIntl(<FindingCard f={FINDING} defaultExpanded agentId="ag1" />);
-    expect(screen.getByRole("button", { name: "Turn into eval case" })).toBeDisabled();
-    expect(screen.getByText("Accept or dismiss first")).toBeInTheDocument();
+    const btn = screen.getByRole("button", { name: "Turn into eval case" });
+    expect(btn).toBeEnabled();
+    expect(screen.queryByText("Accept or dismiss first")).toBeNull();
+    fireEvent.click(btn);
+    expect(createMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "case editor" })).toBeInTheDocument();
   });
 
   it("is enabled for accepted and dismissed findings and creates the case (AC-1, AC-2)", () => {
@@ -109,8 +118,10 @@ describe("FindingCard: Turn into eval case", () => {
     expect(screen.getByRole("button", { name: "Turn into eval case" })).toBeDisabled();
   });
 
-  it("sits after Accept and Dismiss in the action row (AC-13a)", () => {
+  it("shows Accept, Dismiss, Turn into eval case in that order and no Learn / Reply (AC-D36)", () => {
     renderWithIntl(<FindingCard f={ACCEPTED} defaultExpanded agentId="ag1" />);
+    expect(screen.queryByRole("button", { name: /learn/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /reply/i })).toBeNull();
     const names = screen.getAllByRole("button").map((b) => b.textContent?.trim());
     const accept = names.indexOf("Accept");
     const dismiss = names.indexOf("Dismiss");
@@ -137,7 +148,7 @@ describe("FindingCard: Turn into eval case", () => {
 
   it("names must_not_flag for a dismissed finding (AC-12)", () => {
     createState = {
-      data: { created: true, case: { ...CASE, expectation: { ...CASE.expectation, kind: "must_not_flag" } } },
+      data: { created: true, case: { ...CASE, expected: [{ ...CASE.expected[0], kind: "must_not_flag" }] } },
       isPending: false,
       isError: false,
       error: null,

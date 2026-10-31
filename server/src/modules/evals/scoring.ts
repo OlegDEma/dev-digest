@@ -1,7 +1,7 @@
 import type {
   EvalCaseStatus,
   EvalCounts,
-  EvalExpectation,
+  EvalExpectedItem,
   EvalFindingLabel,
   EvalMetrics,
   EvalRunStatus,
@@ -10,7 +10,7 @@ import type {
 } from '@devdigest/shared';
 
 /**
- * Pure eval scoring (AC-38…AC-43). No container, no I/O, no LLM: the same
+ * Pure eval scoring (AC-D42…AC-D48). No container, no I/O, no LLM: the same
  * engine outputs always produce the same labels, counts and metrics.
  */
 
@@ -25,58 +25,79 @@ export interface ScorableFinding {
 
 export type LabelledFinding = ScorableFinding & { label: EvalFindingLabel };
 
-/** Same file and intersecting [start, end] line ranges; severity/category/title are ignored. */
-export function matches(f: ScorableFinding, e: EvalExpectation): boolean {
-  return f.file === e.file && f.start_line <= e.end_line && e.start_line <= f.end_line;
+const endOf = (e: EvalExpectedItem): number => e.end_line ?? e.start_line;
+
+function sameLocation(f: ScorableFinding, e: EvalExpectedItem): boolean {
+  return f.file === e.file && f.start_line <= endOf(e) && e.start_line <= f.end_line;
 }
 
-/** Greedy, in engine output order: the first match gets the expectation's label, the rest are unlabelled. */
+/** File, intersecting line range, severity and category must all match; the title is ignored (AC-D42). */
+export function matchesMustFind(f: ScorableFinding, e: EvalExpectedItem): boolean {
+  return sameLocation(f, e) && f.severity === e.severity && f.category === e.category;
+}
+
+/** Location always; severity/category only when the item carries them (AC-D43). */
+export function matchesMustNotFlag(f: ScorableFinding, e: EvalExpectedItem): boolean {
+  return (
+    sameLocation(f, e) &&
+    (e.severity === undefined || f.severity === e.severity) &&
+    (e.category === undefined || f.category === e.category)
+  );
+}
+
+/**
+ * One label per finding, in engine output order (AC-D44): `tp` on the first
+ * not-yet-hit `must_find` item in list order, else `forbidden` when any
+ * `must_not_flag` item matches or the list is empty, else `unlabelled`.
+ */
 export function labelFindings(
   findings: readonly ScorableFinding[],
-  expectation: EvalExpectation,
+  expected: readonly EvalExpectedItem[],
 ): LabelledFinding[] {
-  const own: EvalFindingLabel = expectation.kind === 'must_find' ? 'tp' : 'forbidden';
-  let taken = false;
+  const hit = new Set<number>();
   return findings.map((f) => {
-    if (!taken && matches(f, expectation)) {
-      taken = true;
-      return { ...f, label: own };
+    const idx = expected.findIndex((e, i) => e.kind === 'must_find' && !hit.has(i) && matchesMustFind(f, e));
+    if (idx >= 0) {
+      hit.add(idx);
+      return { ...f, label: 'tp' as const };
+    }
+    if (expected.length === 0 || expected.some((e) => e.kind === 'must_not_flag' && matchesMustNotFlag(f, e))) {
+      return { ...f, label: 'forbidden' as const };
     }
     return { ...f, label: 'unlabelled' as const };
   });
 }
 
-/** `pass` when a must_find has a tp, or a must_not_flag has no forbidden finding. */
+const mustFindCount = (expected: readonly EvalExpectedItem[]) =>
+  expected.filter((e) => e.kind === 'must_find').length;
+
+/** `pass` when every `must_find` item has a tp and nothing is forbidden (AC-D45). */
 export function caseStatus(
-  expectation: EvalExpectation,
+  expected: readonly EvalExpectedItem[],
   labelled: readonly LabelledFinding[],
 ): 'pass' | 'fail' {
-  if (expectation.kind === 'must_find') {
-    return labelled.some((f) => f.label === 'tp') ? 'pass' : 'fail';
-  }
-  return labelled.some((f) => f.label === 'forbidden') ? 'fail' : 'pass';
+  const tp = labelled.filter((f) => f.label === 'tp').length;
+  const forbidden = labelled.some((f) => f.label === 'forbidden');
+  return tp === mustFindCount(expected) && !forbidden ? 'pass' : 'fail';
 }
 
-export function rangeLabel(e: EvalExpectation): string {
-  return e.end_line === e.start_line ? `${e.file}:${e.start_line}` : `${e.file}:${e.start_line}-${e.end_line}`;
-}
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** "expected <n> finding(s), got <m>" (+ " · <k> forbidden hit(s)" when the case has must_not_flag items) (AC-D46). */
 export function caseSummary(
-  expectation: EvalExpectation,
+  expected: readonly EvalExpectedItem[],
   labelled: readonly LabelledFinding[],
 ): string {
-  if (expectation.kind === 'must_find') {
-    const got = labelled.filter((f) => f.label === 'tp').length;
-    return `expected 1 finding, got ${got}`;
-  }
-  const got = labelled.filter((f) => f.label === 'forbidden').length;
-  return `must not flag ${rangeLabel(expectation)}, got ${got}`;
+  const base = `expected ${plural(mustFindCount(expected), 'finding', 'findings')}, got ${labelled.length}`;
+  if (!expected.some((e) => e.kind === 'must_not_flag')) return base;
+  const k = labelled.filter((f) => f.label === 'forbidden').length;
+  return `${base} · ${plural(k, 'forbidden hit', 'forbidden hits')}`;
 }
 
 /** What `aggregate` needs from one finished case. */
 export interface AggregateInput {
   status: EvalCaseStatus;
-  expectation: EvalExpectation;
+  expected: readonly EvalExpectedItem[];
   findings: readonly { label: EvalFindingLabel }[];
   grounded: number;
   dropped: number;
@@ -84,7 +105,7 @@ export interface AggregateInput {
 }
 
 export interface Aggregate {
-  status: Exclude<EvalRunStatus, 'running'>;
+  status: Exclude<EvalRunStatus, 'queued' | 'running'>;
   metrics: EvalMetrics | null;
   counts: EvalCounts;
   /** Sum of case costs; null when any case cost is unknown (errored cases have none). */
@@ -113,6 +134,8 @@ export function aggregate(results: readonly AggregateInput[]): Aggregate {
   let dropped = 0;
   let mustFind = 0;
   let mustNotFlag = 0;
+  let silent = 0;
+  let fn = 0;
   let passed = 0;
   const perCaseRecall: number[] = [];
   const perCasePrecision: number[] = [];
@@ -127,11 +150,13 @@ export function aggregate(results: readonly AggregateInput[]): Aggregate {
     grounded += r.grounded;
     dropped += r.dropped;
     if (r.status === 'pass') passed++;
-    if (r.expectation.kind === 'must_find') {
-      mustFind++;
-      perCaseRecall.push(caseTp > 0 ? 1 : 0);
-    } else {
-      mustNotFlag++;
+    const caseMustFind = mustFindCount(r.expected);
+    mustFind += caseMustFind;
+    mustNotFlag += r.expected.length - caseMustFind;
+    if (r.expected.length === 0) silent++;
+    if (caseMustFind > 0) {
+      fn += caseMustFind - caseTp;
+      perCaseRecall.push(caseTp / caseMustFind);
     }
     if (caseTp + caseForbidden > 0) perCasePrecision.push(caseTp / (caseTp + caseForbidden));
   }
@@ -144,10 +169,9 @@ export function aggregate(results: readonly AggregateInput[]): Aggregate {
     cases_error: errored,
     must_find_total: mustFind,
     must_not_flag_total: mustNotFlag,
+    silent_total: silent,
     tp,
-    fn: scored.filter(
-      (r) => r.expectation.kind === 'must_find' && !r.findings.some((f) => f.label === 'tp'),
-    ).length,
+    fn,
     forbidden_hits: forbidden,
     unlabelled,
     emitted,

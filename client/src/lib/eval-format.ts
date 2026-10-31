@@ -3,7 +3,7 @@ import type { EvalConfigSnapshot, EvalRunSummary } from "@devdigest/shared";
 const DASH = "—";
 const MINUS = "−";
 
-/** A run that produced metrics (`done` or `partial`). */
+/** A run that produced metrics (`done` or `partial`); `queued` and `running` are not finished. */
 export function isFinished(run: Pick<EvalRunSummary, "status">): boolean {
   return run.status === "done" || run.status === "partial";
 }
@@ -16,9 +16,7 @@ export function formatPct(v: number | null | undefined): string {
 /** Whole-point change vs the previous run, sign written as text: "▲ 4 pt" / "▼ 4 pt" / "± 0 pt". */
 export function formatDelta(cur: number | null | undefined, prev: number | null | undefined): string | null {
   if (cur == null || prev == null) return null;
-  const pts = Math.round((cur - prev) * 100);
-  if (pts === 0) return "± 0 pt";
-  return pts > 0 ? `▲ ${pts} pt` : `▼ ${Math.abs(pts)} pt`;
+  return formatPoints(Math.round(cur * 100) - Math.round(prev * 100));
 }
 
 /** USD cost; `null` (unknown) renders as "—", never "$0.00". */
@@ -117,11 +115,47 @@ export function configDiff(a: EvalConfigSnapshot, b: EvalConfigSnapshot): Config
   return out;
 }
 
-/** Cases present only in `b` (added) / only in `a` (removed). */
-export function caseSetDiff(a: readonly string[], b: readonly string[]): { added: number; removed: number } {
-  const sa = new Set(a);
-  const sb = new Set(b);
-  return { added: [...sb].filter((id) => !sa.has(id)).length, removed: [...sa].filter((id) => !sb.has(id)).length };
+/** A case as the compare view sees it: its id (or run-time name once deleted) and the revision scored. */
+export type CaseRef = string | { key: string; revision: number };
+
+const refKey = (r: CaseRef) => (typeof r === "string" ? r : r.key);
+const refRevision = (r: CaseRef) => (typeof r === "string" ? 1 : r.revision);
+
+/** Cases present only in `b` (added) / only in `a` (removed) / in both with a different scored revision (edited). */
+export function caseSetDiff(
+  a: readonly CaseRef[],
+  b: readonly CaseRef[],
+): { added: number; removed: number; edited: number } {
+  const ma = new Map(a.map((r) => [refKey(r), refRevision(r)]));
+  const mb = new Map(b.map((r) => [refKey(r), refRevision(r)]));
+  let added = 0;
+  let edited = 0;
+  for (const [key, rev] of mb) {
+    if (!ma.has(key)) added++;
+    else if (ma.get(key) !== rev) edited++;
+  }
+  let removed = 0;
+  for (const key of ma.keys()) if (!mb.has(key)) removed++;
+  return { added, removed, edited };
+}
+
+export type MetricBand = "good" | "warn" | "bad";
+
+/** Colour band of a 0..1 metric: >= 0.8 good, >= 0.5 warn, else bad. */
+export function metricBand(v: number): MetricBand {
+  return v >= 0.8 ? "good" : v >= 0.5 ? "warn" : "bad";
+}
+
+export const BAND_COLOR: Record<MetricBand, string> = {
+  good: "var(--ok)",
+  warn: "var(--warn)",
+  bad: "var(--crit)",
+};
+
+/** A whole-point change written as text: "▲ 4 pt" / "▼ 4 pt" / "± 0 pt". */
+export function formatPoints(points: number): string {
+  if (points === 0) return "± 0 pt";
+  return points > 0 ? `▲ ${points} pt` : `▼ ${Math.abs(points)} pt`;
 }
 
 /** Same `agent_version` as the previous run but a different `config_id` (e.g. a skills-only change). */

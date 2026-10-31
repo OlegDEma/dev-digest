@@ -28,7 +28,8 @@ export const evalCases = pgTable(
     ownerId: uuid('owner_id').notNull(),
     name: text('name').notNull(),
     inputDiff: text('input_diff'),
-    // Pre-staged for skill-owned cases (NG6); unused by agent cases.
+    // Agent-case content: Files (EvalCaseInputFile[]), PR meta (EvalPrMeta), expected list (EvalExpectedItem[]).
+    // NULL expected_output = legacy case; the DTO mapper falls back to the expectation_* columns.
     inputFiles: jsonb('input_files'),
     inputMeta: jsonb('input_meta'),
     expectedOutput: jsonb('expected_output'),
@@ -46,7 +47,10 @@ export const evalCases = pgTable(
     displayTitle: text('display_title'),
     displaySeverity: text('display_severity'),
     displayCategory: text('display_category'),
+    // Bumped by every content edit (diff, files, PR meta, expected); a rename keeps it.
+    revision: integer('revision').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     uniqueIndex('eval_cases_source_finding').on(t.sourceFindingId),
@@ -66,7 +70,8 @@ export const evalRuns = pgTable(
       .notNull()
       .references(() => agents.id, { onDelete: 'cascade' }),
     agentName: text('agent_name').notNull(),
-    status: text('status', { enum: ['running', 'done', 'partial', 'failed'] }).notNull(),
+    status: text('status', { enum: ['queued', 'running', 'done', 'partial', 'failed'] }).notNull(),
+    scope: text('scope', { enum: ['all', 'case'] }).notNull().default('all'),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
     progressDone: integer('progress_done').notNull().default(0),
@@ -87,7 +92,7 @@ export const evalRuns = pgTable(
   (t) => [
     uniqueIndex('eval_runs_one_running_per_agent')
       .on(t.agentId)
-      .where(sql`status = 'running'`),
+      .where(sql`status in ('running', 'queued')`),
     index('eval_runs_agent_started').on(t.agentId, t.startedAt),
     index('eval_runs_ws_started').on(t.workspaceId, t.startedAt),
   ],
@@ -103,7 +108,9 @@ export const evalCaseResults = pgTable(
     caseId: uuid('case_id').references(() => evalCases.id, { onDelete: 'set null' }),
     position: integer('position').notNull(),
     caseName: text('case_name').notNull(),
+    // Holds the expected list as scored (a legacy single object on old rows).
     expectation: jsonb('expectation').notNull(),
+    caseRevision: integer('case_revision'),
     status: text('status', { enum: ['pass', 'fail', 'error'] }).notNull(),
     findings: jsonb('findings').notNull().default(sql`'[]'::jsonb`),
     grounded: integer('grounded').notNull().default(0),

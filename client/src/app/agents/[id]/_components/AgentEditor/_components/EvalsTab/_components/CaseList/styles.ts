@@ -5,6 +5,10 @@ export const s = {
   wrap: { marginBottom: 28 } satisfies CSSProperties,
   header: { display: "flex", alignItems: "baseline", gap: 12, marginBottom: 6 } satisfies CSSProperties,
   h2: { fontSize: 16, fontWeight: 700 } satisfies CSSProperties,
+  actions: { marginLeft: "auto", display: "flex", gap: 8, alignSelf: "center" } satisfies CSSProperties,
+  statusIcon: { display: "inline-grid", flexShrink: 0 } satisfies CSSProperties,
+  summary: { display: "flex", gap: 10, fontSize: 12, color: "var(--text-secondary)", flexWrap: "wrap" } satisfies CSSProperties,
+  edited: { color: "var(--warn)" } satisfies CSSProperties,
   passing: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
   count: { fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 } satisfies CSSProperties,
   hint: { color: "var(--text-muted)" } satisfies CSSProperties,
@@ -20,6 +24,7 @@ export const s = {
   } satisfies CSSProperties,
   main: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 } satisfies CSSProperties,
   name: {
+    fontFamily: "var(--font-mono, monospace)",
     fontSize: 13,
     fontWeight: 600,
     whiteSpace: "nowrap",

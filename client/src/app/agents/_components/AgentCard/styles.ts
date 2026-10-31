@@ -40,6 +40,7 @@ export const s = {
     textOverflow: "ellipsis",
   } satisfies CSSProperties,
   metaRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  statsLine: { fontSize: 12, color: "var(--text-muted)", marginTop: 8 } satisfies CSSProperties,
   modelChip: (color: string): CSSProperties => ({
     fontSize: 12,
     fontWeight: 600,

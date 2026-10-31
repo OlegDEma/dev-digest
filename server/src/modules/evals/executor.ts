@@ -1,7 +1,16 @@
-import type { EvalConfigSnapshot, EvalCounts, EvalExpectation, EvalMetrics, LLMProvider } from '@devdigest/shared';
+import type {
+  EvalCaseInputFile,
+  EvalConfigSnapshot,
+  EvalCounts,
+  EvalExpectedItem,
+  EvalMetrics,
+  EvalPrMeta,
+  LLMProvider,
+} from '@devdigest/shared';
+import { normalizeEvalDiff } from '@devdigest/shared';
 import { reviewPullRequest } from '@devdigest/reviewer-core';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
-import { EVAL_CONCURRENCY } from './constants.js';
+import { EVAL_CONCURRENCY, EVAL_EMPTY_DIFF_ERROR } from './constants.js';
 import { aggregate, caseStatus, caseSummary, labelFindings, type AggregateInput } from './scoring.js';
 import type { NewCaseResult } from './repository/eval-run.repo.js';
 
@@ -10,7 +19,18 @@ export interface ExecCase {
   id: string;
   name: string;
   inputDiff: string;
-  expectation: EvalExpectation;
+  /** Extra files shown to the model as context only (never read from disk). */
+  inputFiles: EvalCaseInputFile[];
+  prMeta: EvalPrMeta;
+  /** The case revision this content belongs to; stored on the result (AC-D23). */
+  revision: number;
+  expected: EvalExpectedItem[];
+}
+
+/** PR title + description as one fenced `prDescription` (Q3-a); undefined when both are blank. */
+export function prDescriptionFor(meta: EvalPrMeta): string | undefined {
+  if (meta.title.trim() === '' && meta.description.trim() === '') return undefined;
+  return `Title: ${meta.title}\n\n${meta.description}`;
 }
 
 /** Where the executor writes; backed by the run repository (the executor itself has no DB access). */
@@ -48,8 +68,9 @@ export interface EvalRunInput {
 
 /**
  * Runs one eval run: ≤4 workers over the captured cases, one engine review per
- * case, fed ONLY the stored diff + the snapshot's prompt/model/strategy + skill
- * blocks (no intent, memory, specs, callers or repo map; AC-24, NG10). Scoring is
+ * case, fed ONLY the stored diff, the case's Files and PR meta, and the snapshot's
+ * prompt/model/strategy + skill blocks (no intent, memory, specs, callers or repo
+ * map; AC-D13). Scoring is
  * pure. Logs carry ids, counts, status, duration and cost only (NFR-6).
  */
 export class EvalRunExecutor {
@@ -100,13 +121,20 @@ export class EvalRunExecutor {
     const { runId, snapshot, skillBlocks, llm, sink, log } = input;
     const started = Date.now();
     try {
+      const diff = parseUnifiedDiff(normalizeEvalDiff(c.inputDiff));
+      if (diff.files.length === 0) throw new Error(EVAL_EMPTY_DIFF_ERROR);
+      const prDescription = prDescriptionFor(c.prMeta);
       const outcome = await reviewPullRequest({
         systemPrompt: snapshot.system_prompt,
         model: snapshot.model,
         strategy: snapshot.strategy,
-        diff: parseUnifiedDiff(c.inputDiff),
+        diff,
         llm,
         ...(skillBlocks.length > 0 ? { skills: skillBlocks } : {}),
+        ...(c.inputFiles.length > 0
+          ? { contextFiles: c.inputFiles.map((f) => ({ path: f.path, content: normalizeEvalDiff(f.content) })) }
+          : {}),
+        ...(prDescription !== undefined ? { prDescription } : {}),
       });
       const labelled = labelFindings(
         outcome.review.findings.map((f) => ({
@@ -117,9 +145,9 @@ export class EvalRunExecutor {
           category: f.category,
           title: f.title,
         })),
-        c.expectation,
+        c.expected,
       );
-      const status = caseStatus(c.expectation, labelled);
+      const status = caseStatus(c.expected, labelled);
       const grounded = outcome.review.findings.length;
       const dropped = outcome.dropped.length;
       await sink.insertCaseResult({
@@ -127,29 +155,32 @@ export class EvalRunExecutor {
         caseId: c.id,
         position,
         caseName: c.name,
-        expectation: c.expectation,
+        expectation: c.expected,
+        caseRevision: c.revision,
         status,
         findings: labelled,
         grounded,
         dropped,
-        summary: caseSummary(c.expectation, labelled),
+        summary: caseSummary(c.expected, labelled),
         costUsd: outcome.costUsd,
         durationMs: Date.now() - started,
         error: null,
       });
       return {
-        scored: { status, expectation: c.expectation, findings: labelled, grounded, dropped, costUsd: outcome.costUsd },
+        scored: { status, expected: c.expected, findings: labelled, grounded, dropped, costUsd: outcome.costUsd },
         error: null,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log.warn({ runId, caseId: c.id, error: message }, 'eval case errored');
+      // The provider's message may echo case content: log the error class only; the text is stored on the result row.
+      log.warn({ runId, caseId: c.id, errorName: err instanceof Error ? err.name : 'non-error' }, 'eval case errored');
       await sink.insertCaseResult({
         runId,
         caseId: c.id,
         position,
         caseName: c.name,
-        expectation: c.expectation,
+        expectation: c.expected,
+        caseRevision: c.revision,
         status: 'error',
         findings: [],
         grounded: 0,
@@ -160,7 +191,7 @@ export class EvalRunExecutor {
         error: message,
       });
       return {
-        scored: { status: 'error', expectation: c.expectation, findings: [], grounded: 0, dropped: 0, costUsd: null },
+        scored: { status: 'error', expected: c.expected, findings: [], grounded: 0, dropped: 0, costUsd: null },
         error: message,
       };
     }

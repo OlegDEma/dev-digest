@@ -1,7 +1,10 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { EvalCaseInputFile, EvalExpectedItem, EvalPrMeta } from '@devdigest/shared';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { EvalCaseRow } from './types.js';
+
+const c0 = t.evalCases;
 import type { LastResult } from '../helpers.js';
 
 /**
@@ -24,6 +27,9 @@ export interface NewEvalCase {
   displayTitle: string;
   displaySeverity: string;
   displayCategory: string;
+  expectedOutput: EvalExpectedItem[];
+  inputFiles: EvalCaseInputFile[];
+  inputMeta: EvalPrMeta;
 }
 
 export function findBySourceFinding(
@@ -74,6 +80,132 @@ export async function insertCase(
   return { row: existing, created: false };
 }
 
+function uniqueViolation(err: unknown): { constraint: string | undefined } | null {
+  const e = err as { code?: string; constraint_name?: string; cause?: { code?: string; constraint_name?: string } };
+  if (e?.code !== '23505' && e?.cause?.code !== '23505') return null;
+  return { constraint: e.constraint_name ?? e.cause?.constraint_name };
+}
+
+export async function getCase(db: Db, workspaceId: string, id: string): Promise<EvalCaseRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(t.evalCases)
+    .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.id, id), eq(t.evalCases.ownerKind, 'agent')));
+  return row;
+}
+
+export interface ManualCaseValues {
+  workspaceId: string;
+  agentId: string;
+  name: string;
+  inputDiff: string;
+  inputFiles: EvalCaseInputFile[];
+  inputMeta: EvalPrMeta;
+  expectedOutput: EvalExpectedItem[];
+  sourceFindingId?: string;
+  sourcePrNumber?: number;
+  sourceRepo?: string;
+  displayTitle?: string;
+  displaySeverity?: string;
+  displayCategory?: string;
+}
+
+/** Insert an editor-authored case (revision 1). Unique violations come back as a flag, never a throw. */
+export async function insertManualCase(
+  db: Db,
+  values: ManualCaseValues,
+): Promise<{ row: EvalCaseRow } | { nameTaken: true } | { findingTaken: true }> {
+  try {
+    const [row] = await db
+      .insert(t.evalCases)
+      .values({ ...values, ownerKind: 'agent', ownerId: values.agentId, revision: 1 })
+      .returning();
+    return { row: row! };
+  } catch (err) {
+    const u = uniqueViolation(err);
+    if (!u) throw err;
+    return u.constraint === 'eval_cases_source_finding' ? { findingTaken: true } : { nameTaken: true };
+  }
+}
+
+export interface CaseContentValues {
+  name: string;
+  inputDiff: string;
+  inputFiles: EvalCaseInputFile[];
+  inputMeta: EvalPrMeta;
+  expectedOutput: EvalExpectedItem[];
+}
+
+/**
+ * Update a case in ONE statement (a failed save leaves the row untouched).
+ * `revision` goes up by 1 when the run-relevant content (diff, Files, PR meta,
+ * expected list) differs from what is stored AT UPDATE TIME - decided in SQL, so
+ * concurrent saves each bump correctly. A legacy row (NULL `expected_output`)
+ * cannot be compared column-wise; for it `legacyContentChanged`, computed by the
+ * caller against the legacy mapping, decides.
+ */
+export async function updateCase(
+  db: Db,
+  workspaceId: string,
+  id: string,
+  values: CaseContentValues,
+  legacyContentChanged: boolean,
+): Promise<{ row: EvalCaseRow } | { nameTaken: true } | undefined> {
+  const c = t.evalCases;
+  const files = JSON.stringify(values.inputFiles);
+  const meta = JSON.stringify(values.inputMeta);
+  const expected = JSON.stringify(values.expectedOutput);
+  const revision = sql`CASE
+    WHEN ${c.expectedOutput} IS NULL THEN ${c.revision} + ${legacyContentChanged ? 1 : 0}
+    WHEN (${c.inputDiff}, ${c.inputFiles}, ${c.inputMeta}, ${c.expectedOutput})
+      IS DISTINCT FROM (${values.inputDiff}::text, ${files}::jsonb, ${meta}::jsonb, ${expected}::jsonb)
+    THEN ${c.revision} + 1
+    ELSE ${c.revision} END`;
+  try {
+    const [row] = await db
+      .update(c)
+      .set({ ...values, updatedAt: sql`now()`, revision })
+      .where(and(eq(c.workspaceId, workspaceId), eq(c.id, id), eq(c.ownerKind, 'agent')))
+      .returning();
+    return row ? { row } : undefined;
+  } catch (err) {
+    if (uniqueViolation(err)) return { nameTaken: true };
+    throw err;
+  }
+}
+
+/** Ids of an agent's cases, oldest first (the order a run reviews them in). */
+export async function idsForAgent(db: Db, workspaceId: string, agentId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: c0.id })
+    .from(c0)
+    .where(and(eq(c0.workspaceId, workspaceId), eq(c0.agentId, agentId)))
+    .orderBy(asc(c0.createdAt), asc(c0.id));
+  return rows.map((r) => r.id);
+}
+
+/** Cases of one agent by id, in the order of `ids`; ids that no longer exist are left out. */
+export async function listByIds(
+  db: Db,
+  workspaceId: string,
+  agentId: string,
+  ids: string[],
+): Promise<EvalCaseRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(t.evalCases)
+    .where(
+      and(
+        eq(t.evalCases.workspaceId, workspaceId),
+        eq(t.evalCases.agentId, agentId),
+        inArray(t.evalCases.id, ids),
+      ),
+    );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
 /** Latest result of each case in a FINISHED run (`done`/`partial`). */
 export async function lastResults(db: Db, caseIds: string[]): Promise<Map<string, LastResult>> {
   const out = new Map<string, LastResult>();
@@ -85,6 +217,9 @@ export async function lastResults(db: Db, caseIds: string[]): Promise<Map<string
       status: t.evalCaseResults.status,
       ranAt: t.evalCaseResults.finishedAt,
       summary: t.evalCaseResults.summary,
+      durationMs: t.evalCaseResults.durationMs,
+      costUsd: t.evalCaseResults.costUsd,
+      caseRevision: t.evalCaseResults.caseRevision,
     })
     .from(t.evalCaseResults)
     .innerJoin(t.evalRuns, eq(t.evalRuns.id, t.evalCaseResults.runId))
@@ -93,7 +228,17 @@ export async function lastResults(db: Db, caseIds: string[]): Promise<Map<string
     )
     .orderBy(t.evalCaseResults.caseId, desc(t.evalCaseResults.finishedAt));
   for (const r of rows) {
-    if (r.caseId) out.set(r.caseId, { runId: r.runId, status: r.status, ranAt: r.ranAt, summary: r.summary });
+    if (r.caseId) {
+      out.set(r.caseId, {
+        runId: r.runId,
+        status: r.status,
+        ranAt: r.ranAt,
+        summary: r.summary,
+        durationMs: r.durationMs,
+        costUsd: r.costUsd,
+        caseRevision: r.caseRevision,
+      });
+    }
   }
   return out;
 }

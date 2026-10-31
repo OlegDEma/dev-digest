@@ -1,25 +1,30 @@
-/* AgentCard — model chip, skills count, enabled toggle. Stats are an A5 mount;
-   we render the provider/model + skill count here. */
+/* AgentCard — model chip, skills count, enabled toggle and the 30-day stats
+   line (runs · accept · avg cost). The list view fetches stats once. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, Badge, ConfirmDialog, Toggle } from "@devdigest/ui";
-import type { Agent } from "@devdigest/shared";
+import type { Agent, AgentStats } from "@devdigest/shared";
 import { useDeleteAgent } from "../../../../lib/hooks/agents";
-import { modelColor } from "./helpers";
+import { formatCost } from "../../../../lib/eval-format";
+import { modelColor, percentText } from "./helpers";
 import { s } from "./styles";
 
 export function AgentCard({
   ag,
   active,
   skillCount,
+  stats,
+  statsState,
   onClick,
   onToggle,
 }: {
   ag: Agent;
   active?: boolean;
   skillCount?: number;
+  stats?: AgentStats;
+  statsState?: "loading" | "error" | "ready";
   onClick?: () => void;
   onToggle?: (enabled: boolean) => void;
 }) {
@@ -84,6 +89,20 @@ export function AgentCard({
           </Badge>
         )}
       </div>
+      {statsState === "loading" && (
+        <div style={s.statsLine} aria-busy="true">
+          {t("card.statsLoading")}
+        </div>
+      )}
+      {statsState === "ready" && stats && (
+        <div style={s.statsLine}>
+          {t("card.statsLine", {
+            runs: stats.runs,
+            accept: percentText(stats.accept_rate, t("card.statsUnknown")),
+            cost: formatCost(stats.avg_cost_usd),
+          })}
+        </div>
+      )}
     </div>
   );
 }
