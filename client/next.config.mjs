@@ -13,6 +13,16 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3001",
   },
+  // The vendored @devdigest/shared barrel is NodeNext source: its relative
+  // imports say `./contracts/x.js` but the files are `.ts`. Runtime (non-type)
+  // imports bundle it, so webpack must map `.js` specifiers to `.ts` too.
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
 };
 
 export default withNextIntl(nextConfig);
