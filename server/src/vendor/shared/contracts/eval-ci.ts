@@ -104,10 +104,30 @@ export type EvalDashboard = z.infer<typeof EvalDashboard>;
 
 // ---- Eval pipeline (agent eval cases + runs) ----
 
+/** Why a PR file was not copied into a finding-derived case's Files. */
+export const EvalCaseContextSkipReason = z.enum(['no_diff', 'path_too_long', 'file_size', 'files_count', 'files_total']);
+export type EvalCaseContextSkipReason = z.infer<typeof EvalCaseContextSkipReason>;
+
+export const EvalCaseContextSkip = z.object({
+  path: z.string(),
+  reason: EvalCaseContextSkipReason,
+});
+export type EvalCaseContextSkip = z.infer<typeof EvalCaseContextSkip>;
+
+/** What was auto-filled into a finding-derived case; response-only, never stored. */
+export const EvalCaseContextReport = z.object({
+  files_included: z.number().int().min(0),
+  files_skipped: z.array(EvalCaseContextSkip),
+  files_unavailable: z.number().int().min(0),
+  pr_meta: z.enum(['attached', 'truncated', 'empty']),
+});
+export type EvalCaseContextReport = z.infer<typeof EvalCaseContextReport>;
+
 /** Response of `POST /findings/:id/eval-case` (201 created, 200 already existed). */
 export const CreateEvalCaseResponse = z.object({
   case: EvalCase,
   created: z.boolean(),
+  context: EvalCaseContextReport.optional(),
 });
 export type CreateEvalCaseResponse = z.infer<typeof CreateEvalCaseResponse>;
 
@@ -152,6 +172,12 @@ export const EvalCaseDraft = z
   })
   .strict();
 export type EvalCaseDraft = z.infer<typeof EvalCaseDraft>;
+
+/** Response of `GET /findings/:id/eval-case-draft`: the draft plus the context report. */
+export const EvalCaseDraftResponse = z
+  .object({ ...EvalCaseDraft.shape, context: EvalCaseContextReport })
+  .strict();
+export type EvalCaseDraftResponse = z.infer<typeof EvalCaseDraftResponse>;
 
 export const EvalRunStatus = z.enum(['queued', 'running', 'done', 'partial', 'failed']);
 export type EvalRunStatus = z.infer<typeof EvalRunStatus>;

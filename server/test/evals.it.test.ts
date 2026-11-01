@@ -86,7 +86,7 @@ class StubLLM extends MockLLMProvider {
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       const verdict = this.behave(text);
       if (verdict instanceof Error) throw verdict;
-      const file = this.citeFile ?? /diff --git a\/([^\s\\]+)/.exec(text)?.[1] ?? 'x.ts';
+      const file = this.citeFile ?? /diff --git a\/([^\s\\]+)/.exec(text.slice(Math.max(0, text.indexOf('## Diff to review'))))?.[1] ?? 'x.ts';
       const review: Review = {
         verdict: 'comment',
         summary: 's',
@@ -277,8 +277,8 @@ d('evals (pg)', () => {
       expect(c.expected).toEqual([
         { kind: 'must_find', file: s.file, start_line: 2, end_line: 2, severity: 'CRITICAL', category: 'security' },
       ]);
-      expect(c.input_files).toEqual([]);
-      expect(c.pr_meta).toEqual({ title: '', description: '' });
+      expect(c.input_files.map((f: { path: string }) => f.path)).toEqual(['other.ts']);
+      expect(c.pr_meta).toEqual({ title: 'PR', description: '' });
       expect(c.revision).toBe(1);
       expect(c.name).toBe('sql-injection');
       expect(c.input_diff).toContain(`diff --git a/${s.file} b/${s.file}`);
@@ -471,10 +471,15 @@ d('evals (pg)', () => {
       expect(done.config.system_prompt).toContain('MARKER-A');
       expect(done.config.agent_version).toBe(agent.version);
       expect(llm.calls).toHaveLength(2);
+      const stored = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/eval-cases` }))
+        .json()
+        .find((c: { id: string }) => c.id === c1.case.id);
       const expected = assemblePrompt({
         system: 'You are a reviewer. MARKER-A',
         skills: ['### Skill One\nbody one', '### Skill Two\nbody two'],
-        diff: c1.case ? (await app.inject({ method: 'GET', url: `/agents/${agent.id}/eval-cases` })).json().find((c: { id: string }) => c.id === c1.case.id).input_diff : '',
+        diff: stored.input_diff,
+        contextFiles: stored.input_files,
+        prDescription: `Title: ${stored.pr_meta.title}\n\n${stored.pr_meta.description}`,
       }).messages;
       expect(llm.prompts).toContainEqual(expected);
       expect(JSON.stringify(llm.prompts)).not.toContain('MARKER-B');
@@ -1089,8 +1094,9 @@ d('evals (pg)', () => {
       expect(res.statusCode).toBe(200);
       const d = res.json();
       expect(d.name).toBe('null-deref');
-      expect(d.input_files).toEqual([]);
-      expect(d.pr_meta).toEqual({ title: '', description: '' });
+      expect(d.input_files.map((f: { path: string }) => f.path)).toEqual(['other.ts']);
+      expect(d.pr_meta).toEqual({ title: 'PR', description: '' });
+      expect(d.context).toMatchObject({ files_included: 1, files_skipped: [], pr_meta: 'attached' });
       expect(d.input_diff).toContain(`diff --git a/${s.file} b/${s.file}`);
       expect(d.expected).toEqual([
         { kind: 'must_find', file: s.file, start_line: 2, end_line: 2, severity: 'CRITICAL', category: 'security', title: 'Null deref' },
@@ -1670,6 +1676,31 @@ d('evals (pg)', () => {
       expect(JSON.stringify(llm.prompts)).not.toContain('EDITED-AFTER-ACCEPT');
     });
 
+    it('a queued run whose case is deleted before its slot reports progress_total = the cases actually run', async () => {
+      await db().update(t.agents).set({ enabled: false }).where(eq(t.agents.workspaceId, ws2));
+      const agents = [await mkAgent(), await mkAgent(), await mkAgent()];
+      const second = new Map<string, string>();
+      for (const a of agents) {
+        await mkCase(a.id);
+        second.set(a.id, (await mkCase(a.id)).id);
+      }
+      llm.reset();
+      let release!: () => void;
+      llm.gate = new Promise<void>((r) => (release = r));
+
+      const svc = new EvalService(app.container);
+      const res = await svc.startBatch(ctx2());
+      const queued = res.queued.filter((q) => agents.some((a) => a.id === q.agent_id));
+      expect(queued).toHaveLength(1);
+      await db().delete(t.evalCases).where(eq(t.evalCases.id, second.get(queued[0]!.agent_id)!));
+      release();
+      const rows = await settled(agents.map((a) => a.id));
+      const run = rows.find((r) => r.id === queued[0]!.run_id)!;
+      expect(run.progressTotal).toBe(1);
+      expect(run.progressDone).toBe(1);
+      expect(rows.filter((r) => r.id !== run.id).every((r) => r.progressTotal === 2)).toBe(true);
+    });
+
     it('two concurrent batches never run more than 2 at once; the rest stay queued (AC-D79)', async () => {
       await db().update(t.agents).set({ enabled: false }).where(eq(t.agents.workspaceId, ws2));
       const ws3 = (await db().insert(t.workspaces).values({ name: `batch3-${TAG}` }).returning())[0]!.id;
@@ -1771,6 +1802,146 @@ d('evals (pg)', () => {
       expect(body.skipped.length).toBeGreaterThan(0);
       expect(body.skipped.every((s: { reason: string }) => typeof s.reason === 'string')).toBe(true);
       await settled([agent.id]);
+    });
+  });
+  describe('finding case review context', () => {
+    const listCases = async (agentId: string) =>
+      (await app.inject({ method: 'GET', url: `/agents/${agentId}/eval-cases` })).json() as Array<Record<string, any>>;
+
+    async function setPull(pullId: string, values: Partial<typeof t.pullRequests.$inferInsert>) {
+      await db().update(t.pullRequests).set(values).where(eq(t.pullRequests.id, pullId));
+    }
+
+    it('i1 one-click stores the PR row title and body; report is returned on creation only', async () => {
+      const agent = await createAgent();
+      const s = await seedFinding({ agentId: agent.id, decision: 'accepted' });
+      await setPull(s.pr.id, { title: 'Fix the thing', body: 'Because reasons' });
+      const res = await app.inject({ method: 'POST', url: `/findings/${s.finding.id}/eval-case` });
+      expect(res.statusCode).toBe(201);
+      const out = res.json();
+      expect(out.case.pr_meta).toEqual({ title: 'Fix the thing', description: 'Because reasons' });
+      expect(out.context).toMatchObject({ files_included: 1, pr_meta: 'attached' });
+      const again = await app.inject({ method: 'POST', url: `/findings/${s.finding.id}/eval-case` });
+      expect(again.statusCode).toBe(200);
+      expect(again.json().context).toBeUndefined();
+      expect(JSON.stringify(await listCases(agent.id))).not.toContain('files_unavailable');
+    });
+
+    it('i2 draft and one-click build identical inputs for the same finding', async () => {
+      const agent = await createAgent();
+      const s = await seedFinding({ agentId: agent.id, decision: 'accepted' });
+      await setPull(s.pr.id, { title: 'Same', body: 'Body' });
+      const draft = (await app.inject({ method: 'GET', url: `/findings/${s.finding.id}/eval-case-draft` })).json();
+      const one = (await app.inject({ method: 'POST', url: `/findings/${s.finding.id}/eval-case` })).json();
+      expect(one.case.input_diff).toEqual(draft.input_diff);
+      expect(one.case.input_files).toEqual(draft.input_files);
+      expect(one.case.pr_meta).toEqual(draft.pr_meta);
+      expect(one.context).toEqual(draft.context);
+    });
+
+    it('i3 makes no LLM or GitHub calls on either path', async () => {
+      const agent = await createAgent();
+      const a = await seedFinding({ agentId: agent.id, decision: 'accepted' });
+      const b = await seedFinding({ agentId: agent.id, decision: 'accepted' });
+      const spies = Object.getOwnPropertyNames(MockGitHubClient.prototype)
+        .filter((m) => m !== 'constructor')
+        .map((m) =>
+          vi.spyOn(github as any, m).mockImplementation(() => {
+            throw new Error(`GitHub ${m} must not be called`);
+          }),
+        );
+      try {
+        expect((await app.inject({ method: 'GET', url: `/findings/${a.finding.id}/eval-case-draft` })).statusCode).toBe(200);
+        expect((await app.inject({ method: 'POST', url: `/findings/${b.finding.id}/eval-case` })).statusCode).toBe(201);
+        for (const sp of spies) expect(sp).not.toHaveBeenCalled();
+      } finally {
+        spies.forEach((sp) => sp.mockRestore());
+      }
+      expect(llm.calls).toHaveLength(0);
+    });
+
+    it('i4 pr_files fallback: files_count above the loaded sections -> files_unavailable', async () => {
+      const agent = await createAgent();
+      const s = await seedFinding({ agentId: agent.id, decision: null });
+      await setPull(s.pr.id, { filesCount: 5 });
+      const d = (await app.inject({ method: 'GET', url: `/findings/${s.finding.id}/eval-case-draft` })).json();
+      expect(d.context.files_unavailable).toBe(3);
+    });
+
+    it('i5 saving an edited draft stores the body; a context key is ignored, never stored', async () => {
+      const agent = await createAgent();
+      const s = await seedFinding({ agentId: agent.id, decision: null, title: 'Edited' });
+      await setPull(s.pr.id, { title: 'Orig', body: 'Orig body' });
+      const draft = (await app.inject({ method: 'GET', url: `/findings/${s.finding.id}/eval-case-draft` })).json();
+      const { context, ...rest } = draft;
+      const res = await app.inject({
+        method: 'POST',
+        url: `/agents/${agent.id}/eval-cases`,
+        payload: {
+          ...rest,
+          input_files: [],
+          pr_meta: { title: 'Edited title', description: 'x' },
+          source_finding_id: s.finding.id,
+          context,
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const stored = res.json();
+      expect(stored.input_files).toEqual([]);
+      expect(stored.pr_meta).toEqual({ title: 'Edited title', description: 'x' });
+      expect(stored.context).toBeUndefined();
+      const [row] = await listCases(agent.id);
+      expect(JSON.stringify(row)).not.toContain('files_included');
+    });
+
+    it('i6 headline: the artifact file reaches the eval prompt with the PR title and body', async () => {
+      const agent = await createAgent();
+      const s = await seedFinding({
+        agentId: agent.id,
+        decision: 'accepted',
+        file: 'src/run.ts',
+        patch: "@@ -1,1 +1,2 @@\n a\n+import { x } from './artifact.js';",
+      });
+      await setPull(s.pr.id, { title: 'HEADLINE-TITLE', body: 'HEADLINE-BODY' });
+      await db()
+        .insert(t.prFiles)
+        .values([
+          { prId: s.pr.id, path: 'docs/readme.md', patch: '@@ -1 +1 @@\n-a\n+b' },
+          { prId: s.pr.id, path: 'src/artifact.ts', patch: '@@ -0,0 +1 @@\n+ARTIFACT-LINE' },
+        ]);
+      const created = (await app.inject({ method: 'POST', url: `/findings/${s.finding.id}/eval-case` })).json();
+      expect(created.case.input_files[0].path).toBe('src/artifact.ts');
+      const run = await app.inject({
+        method: 'POST',
+        url: `/agents/${agent.id}/eval-runs`,
+        payload: { case_id: created.case.id },
+      });
+      expect(run.statusCode).toBe(202);
+      await waitRun(run.json().id);
+      const prompt = JSON.stringify(llm.prompts);
+      expect(prompt).toContain('Additional files (context only');
+      expect(prompt).toContain('ARTIFACT-LINE');
+      expect(prompt).toContain('HEADLINE-TITLE');
+      expect(prompt).toContain('HEADLINE-BODY');
+    });
+
+    it('i7 a pre-existing case with empty Files and meta is untouched by finding-derived creation', async () => {
+      const agent = await createAgent();
+      const diff = 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n';
+      const made = await app.inject({
+        method: 'POST',
+        url: `/agents/${agent.id}/eval-cases`,
+        payload: { name: 'legacy-case', input_diff: diff, input_files: [], pr_meta: { title: '', description: '' }, expected: [] },
+      });
+      expect(made.statusCode).toBe(201);
+      const before = (await listCases(agent.id)).find((c) => c.name === 'legacy-case')!;
+      const s = await seedFinding({ agentId: agent.id, decision: 'accepted' });
+      expect((await app.inject({ method: 'POST', url: `/findings/${s.finding.id}/eval-case` })).statusCode).toBe(201);
+      const after = (await listCases(agent.id)).find((c) => c.name === 'legacy-case')!;
+      expect(after.input_diff).toBe(before.input_diff);
+      expect(after.input_files).toEqual([]);
+      expect(after.pr_meta).toEqual({ title: '', description: '' });
+      expect(after.revision).toBe(before.revision);
     });
   });
 });

@@ -34,7 +34,7 @@ export function AgentEvalPage({ agentId }: { agentId: string }) {
 
   const q = useAgentEvalDashboard(agentId, range);
   const agentsQ = useAgents();
-  const startRun = useStartEvalRun(agentId);
+  const startRun = useStartEvalRun(agentId, { silentError: true });
   const [selected, setSelected] = React.useState<string[]>([]);
   const [comparing, setComparing] = React.useState(false);
   const [startError, setStartError] = React.useState<string | null>(null);
@@ -67,14 +67,15 @@ export function AgentEvalPage({ agentId }: { agentId: string }) {
             {t("agentPage.allAgents")}
           </Link>
           {agentOptions.length > 0 && (
-            <div style={s.select} aria-label={t("agentPage.agentSelect")}>
+            <label style={s.select}>
+              <span style={s.srOnly}>{t("agentPage.agentSelect")}</span>
               <SelectInput
                 mono={false}
                 value={agentId}
                 options={agentOptions}
                 onChange={(id) => router.push(`/eval/${id}${query(range)}`)}
               />
-            </div>
+            </label>
           )}
           <div role="group" aria-label={t("agentPage.range")} style={s.ranges}>
             {RANGES.map((r) => (

@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@devdigest/ui";
 import type { EvalCase, FindingRecord } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
-import { EvalCaseEditor } from "@/components/eval-case-editor";
+import { ContextSummary, EvalCaseEditor } from "@/components/eval-case-editor";
 import { useAgent } from "@/lib/hooks/agents";
 import { useCreateEvalCaseFromFinding, useEvalCaseDraft } from "@/lib/hooks/evals";
 import { s } from "./styles";
@@ -76,6 +76,7 @@ export function EvalCaseAction({ finding, agentId }: { finding: FindingRecord; a
           <Link href={evalsHref} style={s.link}>
             {t("findingCard.viewEvals")}
           </Link>
+          {create.data.created && create.data.context && <ContextSummary report={create.data.context} />}
         </div>
       )}
       {create.isError && (

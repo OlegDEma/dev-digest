@@ -5,6 +5,7 @@ export const s = {
   body: { padding: "18px 24px", display: "flex", flexDirection: "column", gap: 18 } satisfies CSSProperties,
   nameLabel: { display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 } satisfies CSSProperties,
   inputLabel: { fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 } satisfies CSSProperties,
+  contextStatus: { padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-surface)" } satisfies CSSProperties,
   tabPanel: { paddingTop: 12 } satisfies CSSProperties,
   error: { fontSize: 12, color: "var(--crit)", marginTop: 6 } satisfies CSSProperties,
   footer: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,

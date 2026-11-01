@@ -220,5 +220,22 @@
     "agent": "Agent",
     "version": "Version",
     "status": "Status"
+  },
+  "caseContext": {
+    "summary": "Context: {n, plural, one {# file} other {# files}} from the PR · {meta}",
+    "metaAttached": "PR meta attached",
+    "metaTruncated": "PR meta attached (truncated)",
+    "metaEmpty": "no PR meta",
+    "skipped": " · {k, plural, one {# file} other {# files}} skipped (limit)",
+    "unavailable": " · {u, plural, one {# PR file} other {# PR files}} had no diff available",
+    "showSkipped": "Show skipped files",
+    "more": "and {n} more",
+    "reason": {
+      "no_diff": "no diff (binary or empty change)",
+      "path_too_long": "path over 300 characters",
+      "file_size": "over 64 KB",
+      "files_count": "over the 10-file limit",
+      "files_total": "over the 256 KB total"
+    }
   }
 }

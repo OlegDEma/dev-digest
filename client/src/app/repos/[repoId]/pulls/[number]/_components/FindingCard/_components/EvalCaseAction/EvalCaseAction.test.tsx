@@ -17,7 +17,8 @@ vi.mock("@/lib/hooks/evals", () => ({
   },
 }));
 vi.mock("@/lib/hooks/agents", () => ({ useAgent: () => ({ data: { id: "ag1", name: "Security Reviewer" } }) }));
-vi.mock("@/components/eval-case-editor", () => ({
+vi.mock("@/components/eval-case-editor", async () => ({
+  ContextSummary: (await import("@/components/eval-case-editor/ContextSummary")).ContextSummary,
   EvalCaseEditor: (p: {
     agent: { id: string; name: string };
     findingId: string;
@@ -124,6 +125,29 @@ describe("EvalCaseAction", () => {
     };
     mount();
     expect(screen.getByRole("link", { name: "View in Evals tab" })).toHaveAttribute("href", "/agents/ag1?tab=evals");
+  });
+
+  it("c2 shows the context summary inside the confirmation on created:true, none on created:false", () => {
+    const context = { files_included: 2, files_skipped: [], files_unavailable: 171, pr_meta: "attached" };
+    state = {
+      data: { created: true, case: { expected: [{ kind: "must_find" }] }, context },
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    const first = mount();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Context: 2 files from the PR · PR meta attached · 171 PR files had no diff available",
+    );
+    first.unmount();
+    state = {
+      data: { created: false, case: { expected: [{ kind: "must_find" }] }, context },
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    mount();
+    expect(screen.queryByText(/Context:/)).toBeNull();
   });
 
   it("names the file on diff_unavailable", () => {

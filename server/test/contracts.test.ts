@@ -33,6 +33,9 @@ import {
   EvalExpectedItem,
   EvalExpectedList,
   EvalCaseDraft,
+  EvalCaseDraftResponse,
+  EvalCaseContextReport,
+  CreateEvalCaseResponse,
   EvalCaseDraftBody,
   EVAL_INPUT_LIMITS,
   EVAL_SCHEMA_CAPS,
@@ -577,6 +580,43 @@ describe('Eval parity request/response contracts', () => {
     expect(EvalCaseDraft.safeParse(draft).success).toBe(true);
     expect(EvalCaseDraft.safeParse({ ...draft, name: 'Bad Name' }).success).toBe(false);
     expect(EvalCaseDraft.safeParse({ ...draft, extra: 1 }).success).toBe(false);
+  });
+
+  describe('finding case context report', () => {
+    const report = {
+      files_included: 2,
+      files_skipped: [{ path: 'a.bin', reason: 'no_diff' }],
+      files_unavailable: 0,
+      pr_meta: 'attached',
+    };
+    const draft = {
+      name: 'null-deref',
+      input_diff: 'd',
+      input_files: [],
+      pr_meta: { title: '', description: '' },
+      expected: [],
+    };
+
+    it('EvalCaseContextReport accepts a valid object and rejects bad enum case / negative counts', () => {
+      expect(EvalCaseContextReport.safeParse(report).success).toBe(true);
+      expect(
+        EvalCaseContextReport.safeParse({ ...report, files_skipped: [{ path: 'a', reason: 'NO_DIFF' }] }).success,
+      ).toBe(false);
+      expect(EvalCaseContextReport.safeParse({ ...report, files_unavailable: -1 }).success).toBe(false);
+      expect(EvalCaseContextReport.safeParse({ ...report, pr_meta: 'Attached' }).success).toBe(false);
+    });
+
+    it('CreateEvalCaseResponse.context is optional', () => {
+      expect(CreateEvalCaseResponse.shape.context.safeParse(report).success).toBe(true);
+      expect(CreateEvalCaseResponse.shape.context.safeParse(undefined).success).toBe(true);
+      expect(CreateEvalCaseResponse.shape.context.safeParse({ ...report, pr_meta: 'x' }).success).toBe(false);
+    });
+
+    it('EvalCaseDraftResponse requires context and rejects an extra key', () => {
+      expect(EvalCaseDraftResponse.safeParse({ ...draft, context: report }).success).toBe(true);
+      expect(EvalCaseDraftResponse.safeParse(draft).success).toBe(false);
+      expect(EvalCaseDraftResponse.safeParse({ ...draft, context: report, extra: 1 }).success).toBe(false);
+    });
   });
 
   it('StartEvalRunBody is optional and takes a uuid case_id', () => {

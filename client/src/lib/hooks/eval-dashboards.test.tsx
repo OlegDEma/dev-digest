@@ -91,4 +91,29 @@ describe("eval dashboard hooks", () => {
     await waitFor(() => expect(result.current).toBe(0));
     expect(spy.mock.calls.filter((c) => JSON.stringify(c[0]) === '{"queryKey":["eval-dashboard"]}')).toHaveLength(1);
   });
+  it("a transient poll error does not latch the overview: errored-with-data counts by its data status", async () => {
+    let calls = 0;
+    fetchMock.mockImplementation(() => {
+      calls++;
+      if (calls === 1) return json(makeDetail({ id: "r1", status: "running" }));
+      if (calls === 2) return Promise.reject(new Error("network blip"));
+      return json(makeDetail({ id: "r1", status: "done" }));
+    });
+    const { Wrapper, client } = wrapper();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const overview = () => spy.mock.calls.filter((c) => JSON.stringify(c[0]) === '{"queryKey":["eval-dashboard"]}');
+    const { result } = renderHook(() => useWatchEvalRuns(["r1"]), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current).toBe(1));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["eval-run"] });
+    });
+    expect(client.getQueryState(["eval-run", "r1"])?.status).toBe("error");
+    expect(result.current).toBe(1);
+    expect(overview()).toHaveLength(0);
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["eval-run"] });
+    });
+    await waitFor(() => expect(result.current).toBe(0));
+    expect(overview()).toHaveLength(1);
+  });
 });

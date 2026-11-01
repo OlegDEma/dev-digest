@@ -63,6 +63,14 @@ describe('assemblePrompt — ## PR description', () => {
     });
     expect((assembly.pr_description as string).length).toBe(4000);
   });
+
+  it('prDescriptionMaxChars raises the cap; the default stays 4000', () => {
+    const body = 'x'.repeat(8209);
+    const raised = assemblePrompt({ system: 'sys', diff: 'D', prDescription: body, prDescriptionMaxChars: 8209 });
+    expect((raised.assembly.pr_description as string).length).toBe(8209);
+    const dflt = assemblePrompt({ system: 'sys', diff: 'D', prDescription: body });
+    expect((dflt.assembly.pr_description as string).length).toBe(4000);
+  });
 });
 
 describe('assemblePrompt — PR intent slot', () => {

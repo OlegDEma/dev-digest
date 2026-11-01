@@ -99,6 +99,11 @@ export async function markRunning(db: Db, id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** A queued batch run reads its cases late: shrink the total to the cases that still exist. */
+export async function setProgressTotal(db: Db, id: string, total: number): Promise<void> {
+  await db.update(t.evalRuns).set({ progressTotal: total }).where(eq(t.evalRuns.id, id));
+}
+
 /** The agent's `running` or `queued` run, if any. */
 export function findActiveRun(db: Db, agentId: string): Promise<EvalRunRow | undefined> {
   return db

@@ -109,6 +109,8 @@ export interface PromptParts {
    * undefined → section omitted.
    */
   prDescription?: string;
+  /** Override of the PR-description cap (default 4000); eval cases pass a larger one. */
+  prDescriptionMaxChars?: number;
   /**
    * Rendered derived PR intent (untrusted — derived from author-controlled
    * text). Delimiter-wrapped, followed by scope rules, right before the diff.
@@ -173,7 +175,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
 
   const prDescription =
     parts.prDescription && parts.prDescription.trim().length > 0
-      ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
+      ? parts.prDescription.slice(0, parts.prDescriptionMaxChars ?? MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
   const userSections: ReviewPromptSection[] = [];

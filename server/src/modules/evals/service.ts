@@ -12,7 +12,8 @@ import {
   type EvalBatchResult,
   type EvalBatchSkip,
   type EvalCase,
-  type EvalCaseDraft,
+  type EvalCaseContextReport,
+  type EvalCaseDraftResponse,
   type EvalCaseDraftBody,
   type EvalConfigSnapshot,
   type EvalDashboardOverview,
@@ -42,6 +43,7 @@ import {
   EVAL_SPARKLINE_POINTS,
   MAX_EVAL_CASES_PER_AGENT,
 } from './constants.js';
+import { buildCaseContext, contextLogFields } from './case-context.js';
 import { EvalRunExecutor, type EvalLogger, type ExecCase } from './executor.js';
 import {
   caseNameFor,
@@ -138,7 +140,7 @@ export class EvalService {
       });
     }
 
-    const { inputDiff, repoRow } = await this.findingDiff(ctx, found);
+    const { inputDiff, repoRow, inputFiles, inputMeta, context } = await this.findingInputs(ctx, found);
 
     // A concurrent creation can take the same slug between the read and the
     // insert (unique index): recompute the next free `-N` and try again.
@@ -160,11 +162,12 @@ export class EvalService {
         displaySeverity: finding.severity as Severity,
         displayCategory: finding.category as FindingCategory,
         expectedOutput,
-        inputFiles: [],
-        inputMeta: { title: '', description: '' },
+        inputFiles,
+        inputMeta,
       });
       if ('nameTaken' in res) continue;
-      return this.caseResponse(res.row, res.created);
+      if (res.created) this.log.info(contextLogFields(context), 'eval case context built');
+      return this.caseResponse(res.row, res.created, res.created ? context : undefined);
     }
     throw new AppError('eval_case_name_conflict', 'Could not allocate a unique case name, retry', 409);
   }
@@ -195,8 +198,12 @@ export class EvalService {
     }
   }
 
-  /** The finding's file cut out of its PR diff (whole-file diff of AC-3a). */
-  private async findingDiff(ctx: RequestContext, found: FindingContext) {
+  /**
+   * Everything a finding-derived case is built from, for the one-click and the
+   * draft path alike: the finding's file diff (whole-file diff of AC-3a) plus the
+   * other PR files and PR meta, from one `loadDiff` call.
+   */
+  private async findingInputs(ctx: RequestContext, found: FindingContext) {
     const repo = this.container.reviewRepo;
     const { finding, pull } = found;
     const repoRow = await repo.getRepo(pull.repoId);
@@ -216,11 +223,17 @@ export class EvalService {
     }
     const inputDiff = sliceFileDiff(raw, finding.file);
     if (inputDiff === '') throw unavailable();
-    return { inputDiff, repoRow };
+    const built = buildCaseContext({
+      raw,
+      findingFile: finding.file,
+      findingSection: inputDiff,
+      pull: { title: pull.title, body: pull.body, filesCount: pull.filesCount },
+    });
+    return { inputDiff, repoRow, ...built };
   }
 
-  private caseResponse(row: EvalCaseRow, created: boolean): CreateEvalCaseResponse {
-    return { case: toEvalCaseDto(row, null), created };
+  private caseResponse(row: EvalCaseRow, created: boolean, context?: EvalCaseContextReport): CreateEvalCaseResponse {
+    return { case: toEvalCaseDto(row, null), created, ...(context ? { context } : {}) };
   }
 
   /** Counts a rejected save by code only — never its content (NFR-D7). */
@@ -355,7 +368,7 @@ export class EvalService {
   }
 
   /** `GET /findings/:id/eval-case-draft` — what the editor opens with; nothing is persisted, 0 LLM. */
-  async draftFromFinding(ctx: RequestContext, findingId: string): Promise<EvalCaseDraft> {
+  async draftFromFinding(ctx: RequestContext, findingId: string): Promise<EvalCaseDraftResponse> {
     const found = await this.container.reviewRepo.findingContext(findingId);
     if (!found || found.review.workspaceId !== ctx.workspaceId) {
       throw new AppError('finding_not_found', 'Finding not found', 404);
@@ -365,14 +378,16 @@ export class EvalService {
     if (existing) {
       throw new AppError('eval_case_exists', 'This finding is already an eval case', 409, { case_id: existing.id });
     }
-    const { inputDiff } = await this.findingDiff(ctx, found);
+    const { inputDiff, inputFiles, inputMeta, context } = await this.findingInputs(ctx, found);
+    this.log.info(contextLogFields(context), 'eval case context built');
     const { finding } = found;
     const taken = await caseRepo.namesForAgent(this.db, ctx.workspaceId, agent.id);
     return {
       name: caseNameFor(finding.title, taken),
       input_diff: inputDiff,
-      input_files: [],
-      pr_meta: { title: '', description: '' },
+      input_files: inputFiles,
+      pr_meta: { title: inputMeta.title, description: inputMeta.description },
+      context,
       expected: [
         {
           kind: 'must_find',
@@ -608,6 +623,9 @@ export class EvalService {
     if (rows.length === 0) {
       await runRepo.failRun(this.db, run.id, 'all eval cases were deleted before the run started');
       return;
+    }
+    if (rows.length !== (run.caseIds as string[]).length) {
+      await runRepo.setProgressTotal(this.db, run.id, rows.length);
     }
     const llm = await this.requireProvider(agent);
     await this.executor.run({

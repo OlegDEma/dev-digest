@@ -23,6 +23,12 @@ export function FilesTab({
   problem: string | null;
 }) {
   const t = useTranslations("eval");
+  // Stable row ids so removing a row never hands its DOM (focus, caret) to another file.
+  // They live only here: `files` stays plain {path, content} and is what the editor saves.
+  const rowIds = React.useRef<string[]>([]);
+  const nextId = React.useRef(0);
+  while (rowIds.current.length < files.length) rowIds.current.push(`row-${nextId.current++}`);
+  if (rowIds.current.length > files.length) rowIds.current.length = files.length;
   const patch = (i: number, p: Partial<EvalCaseInputFile>) =>
     onChange(files.map((f, j) => (j === i ? { ...f, ...p } : f)));
 
@@ -30,7 +36,7 @@ export function FilesTab({
     <div>
       {files.length === 0 && <div style={s.empty}>{t("caseEditor.files.empty")}</div>}
       {files.map((f, i) => (
-        <div key={i} style={s.entry} data-testid="file-entry">
+        <div key={rowIds.current[i]} style={s.entry} data-testid="file-entry">
           <div style={s.pathRow}>
             <div style={s.grow}>
               <TextInput
@@ -45,7 +51,10 @@ export function FilesTab({
               icon="Trash"
               danger
               label={t("caseEditor.files.remove", { path: f.path })}
-              onClick={() => onChange(files.filter((_, j) => j !== i))}
+              onClick={() => {
+                rowIds.current = rowIds.current.filter((_, j) => j !== i);
+                onChange(files.filter((_, j) => j !== i));
+              }}
             />
           </div>
           <label>

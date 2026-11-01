@@ -7,7 +7,7 @@ import type {
   EvalPrMeta,
   LLMProvider,
 } from '@devdigest/shared';
-import { normalizeEvalDiff } from '@devdigest/shared';
+import { EVAL_INPUT_LIMITS, normalizeEvalDiff } from '@devdigest/shared';
 import { reviewPullRequest } from '@devdigest/reviewer-core';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
 import { EVAL_CONCURRENCY, EVAL_EMPTY_DIFF_ERROR } from './constants.js';
@@ -26,6 +26,10 @@ export interface ExecCase {
   revision: number;
   expected: EvalExpectedItem[];
 }
+
+/** `Title: <title>\n\n<description>` at the save limits must reach the engine uncut (its default cap is 4,000). */
+export const PR_DESCRIPTION_PROMPT_CHARS =
+  'Title: '.length + EVAL_INPUT_LIMITS.prTitleChars + 2 + EVAL_INPUT_LIMITS.prDescriptionChars;
 
 /** PR title + description as one fenced `prDescription` (Q3-a); undefined when both are blank. */
 export function prDescriptionFor(meta: EvalPrMeta): string | undefined {
@@ -134,7 +138,7 @@ export class EvalRunExecutor {
         ...(c.inputFiles.length > 0
           ? { contextFiles: c.inputFiles.map((f) => ({ path: f.path, content: normalizeEvalDiff(f.content) })) }
           : {}),
-        ...(prDescription !== undefined ? { prDescription } : {}),
+        ...(prDescription !== undefined ? { prDescription, prDescriptionMaxChars: PR_DESCRIPTION_PROMPT_CHARS } : {}),
       });
       const labelled = labelFindings(
         outcome.review.findings.map((f) => ({

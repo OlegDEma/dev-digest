@@ -50,6 +50,13 @@ const DIFF = [
 const ITEM = '[{"kind":"must_find","file":"src/a.ts","start_line":2,"severity":"CRITICAL","category":"security"}]';
 const EVIL = "<img src=x onerror=alert(1)>";
 
+const CONTEXT = {
+  files_included: 3,
+  files_skipped: [{ path: "img.png", reason: "no_diff" }],
+  files_unavailable: 0,
+  pr_meta: "attached",
+};
+
 const onClose = vi.fn();
 const onSaved = vi.fn();
 
@@ -340,6 +347,7 @@ describe("EvalCaseEditor: loading an existing case or a draft (AC-D9a, AC-D9b)",
       input_files: [],
       pr_meta: { title: "", description: "" },
       expected: JSON.parse(ITEM),
+      context: CONTEXT,
     });
     mount({ findingId: "f1" });
     expect(textbox(/^Name/)).toHaveValue("stripe-key-1");
@@ -347,6 +355,41 @@ describe("EvalCaseEditor: loading an existing case or a draft (AC-D9a, AC-D9b)",
     expect(saveBtn()).toBeEnabled();
     fireEvent.click(saveBtn());
     expect(createMutate.mock.calls[0]![0].source_finding_id).toBe("f1");
+  });
+});
+
+describe("EvalCaseEditor: finding context summary (AC-R15, AC-R16)", () => {
+  const draft = {
+    name: "stripe-key-1",
+    input_diff: DIFF,
+    input_files: [{ path: "src/b.ts", content: "diff --git a/src/b.ts b/src/b.ts" }],
+    pr_meta: { title: "T", description: "D" },
+    expected: JSON.parse(ITEM),
+    context: CONTEXT,
+  };
+
+  it("c3 shows the summary in a role=status region on a finding draft", () => {
+    draftState = ok(draft);
+    mount({ findingId: "f1" });
+    const region = screen.getAllByRole("status").find((el) => /Context:/.test(el.textContent ?? ""));
+    expect(region).toHaveTextContent("Context: 3 files from the PR · PR meta attached · 1 file skipped (limit)");
+  });
+
+  it("c3 shows no summary when editing an existing case", () => {
+    casesState = ok([makeCase({ id: "c1", name: "stripe-key", input_diff: DIFF })]);
+    draftState = ok(draft);
+    mount({ caseId: "c1", findingId: "f1" });
+    expect(screen.queryByText(/Context:/)).toBeNull();
+  });
+
+  it("c4 the saved body carries the prefilled Files and PR meta and never a context key", () => {
+    draftState = ok(draft);
+    mount({ findingId: "f1" });
+    fireEvent.click(saveBtn());
+    const body = createMutate.mock.calls[0]![0];
+    expect(body.input_files).toEqual(draft.input_files);
+    expect(body.pr_meta).toEqual(draft.pr_meta);
+    expect("context" in body).toBe(false);
   });
 });
 

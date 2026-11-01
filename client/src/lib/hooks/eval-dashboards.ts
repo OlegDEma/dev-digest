@@ -34,6 +34,7 @@ export function useAgentEvalDashboard(agentId: string | null | undefined, range:
 export function useStartEvalBatch() {
   const qc = useQueryClient();
   return useMutation({
+    meta: { silentError: true },
     mutationFn: () => api.post<EvalBatchResult>("/eval-runs/batch"),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["eval-dashboard"] });
@@ -55,6 +56,7 @@ export function useAgentEvalConfig(agentId: string | null | undefined) {
 export function usePromoteEvalRun(agentId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { silentError: true },
     mutationFn: (body: PromoteEvalBody) => api.post<PromoteEvalResult>(`/agents/${agentId}/promote`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["agent", agentId] });
@@ -81,7 +83,7 @@ export function useWatchEvalRuns(runIds: readonly string[]): number {
         inFlight(query.state.data?.status) ? EVAL_POLL_MS : false,
     })),
   });
-  const running = results.filter((r) => !r.isError && inFlight(r.data?.status)).length;
+  const running = results.filter((r) => inFlight(r.data?.status) && !(r.isError && !r.data)).length;
   const key = runIds.join(",");
   const doneFor = React.useRef("");
   React.useEffect(() => {

@@ -16,9 +16,11 @@ import {
   unmatchableItems,
   validateEvalDiff,
   type EvalCase,
+  type EvalCaseContextReport,
 } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import { useAgentEvalCases, useAgentEvalRuns, useEvalCaseDraft } from "@/lib/hooks/evals";
+import { ContextSummary } from "../ContextSummary";
 import { DiffTab } from "./_components/DiffTab";
 import { ExpectedOutput } from "./_components/ExpectedOutput";
 import { FilesTab } from "./_components/FilesTab";
@@ -112,6 +114,7 @@ export function EvalCaseEditor({ agent, caseId, findingId, onClose, onSaved }: E
       initial={initial}
       initialCaseId={existing?.id ?? null}
       findingId={caseId ? null : (findingId ?? null)}
+      context={caseId ? undefined : draftQ.data?.context}
       onClose={onClose}
       onSaved={onSaved}
     />
@@ -123,6 +126,7 @@ function EditorBody({
   initial,
   initialCaseId,
   findingId,
+  context,
   onClose,
   onSaved,
 }: {
@@ -130,6 +134,7 @@ function EditorBody({
   initial: EditorForm;
   initialCaseId: string | null;
   findingId: string | null;
+  context: EvalCaseContextReport | undefined;
   onClose: () => void;
   onSaved: ((saved: EvalCase) => void) | undefined;
 }) {
@@ -230,6 +235,11 @@ function EditorBody({
         }
       >
         <div style={s.body}>
+          {context && (
+            <div role="status" style={s.contextStatus}>
+              <ContextSummary report={context} />
+            </div>
+          )}
           <div>
             <label>
               <span style={s.nameLabel}>{t("caseEditor.nameLabel")}</span>

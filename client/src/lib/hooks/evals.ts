@@ -12,7 +12,7 @@ import type {
   CreateEvalCaseBody,
   CreateEvalCaseResponse,
   EvalCase,
-  EvalCaseDraft,
+  EvalCaseDraftResponse,
   EvalCaseDraftBody,
   EvalDashboardOverview,
   EvalRunDetail,
@@ -76,7 +76,7 @@ export function useUpdateEvalCase(agentId: string | null | undefined) {
 export function useEvalCaseDraft(findingId: string | null | undefined) {
   return useQuery({
     queryKey: ["eval-case-draft", findingId],
-    queryFn: () => api.get<EvalCaseDraft>(`/findings/${findingId}/eval-case-draft`),
+    queryFn: () => api.get<EvalCaseDraftResponse>(`/findings/${findingId}/eval-case-draft`),
     enabled: !!findingId,
     retry: false,
     staleTime: 0,

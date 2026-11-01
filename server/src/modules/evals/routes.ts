@@ -8,7 +8,7 @@ import {
   CreateEvalCaseResponse,
   EvalBatchResult,
   EvalCase,
-  EvalCaseDraft,
+  EvalCaseDraftResponse,
   EvalCaseDraftBody,
   EvalConfigSnapshot,
   EvalDashboardOverview,
@@ -58,7 +58,7 @@ export default async function evalRoutes(appBase: FastifyInstance) {
 
   app.get(
     '/findings/:id/eval-case-draft',
-    { schema: { params: IdParams, response: { 200: EvalCaseDraft } } },
+    { schema: { params: IdParams, response: { 200: EvalCaseDraftResponse } } },
     async (req) => service.draftFromFinding(await getContext(app.container, req), req.params.id),
   );
 
