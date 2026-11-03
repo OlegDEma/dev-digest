@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "deny": [
+      "Agent(test-writer)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -12,9 +17,24 @@
       }
     ]
   },
-  "permissions": {
-    "deny": [
-      "Agent(test-writer)"
-    ]
+  "enabledPlugins": {
+    "sdd-engineering@dev-digest-ai-marketplace-stable": true,
+    "engineering-paved-path@dev-digest-ai-marketplace-stable": true,
+    "research-tools@dev-digest-ai-marketplace-stable": true,
+    "architecture-review@dev-digest-ai-marketplace-stable": true,
+    "sdd-engineering@dev-digest-ai-marketplace": false,
+    "engineering-paved-path@dev-digest-ai-marketplace": false,
+    "research-tools@dev-digest-ai-marketplace": false,
+    "architecture-review@dev-digest-ai-marketplace": false,
+    "security-review@dev-digest-ai-marketplace": false
+  },
+  "extraKnownMarketplaces": {
+    "dev-digest-ai-marketplace-stable": {
+      "source": {
+        "source": "github",
+        "repo": "OlegDEma/devdigest_team_ai_marketplace",
+        "ref": "stable"
+      }
+    }
   }
 }
