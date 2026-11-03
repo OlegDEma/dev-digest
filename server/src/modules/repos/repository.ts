@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -75,6 +75,27 @@ export class RepoRepository {
       .update(t.repos)
       .set({ clonePath, lastPolledAt: new Date() })
       .where(eq(t.repos.id, repoId));
+  }
+
+  /** Repo by id for the admin preview (admin token already checked by the route). */
+  async getByIdUnscoped(id: string): Promise<RepoRow | undefined> {
+    const [row] = await this.db.select().from(t.repos).where(eq(t.repos.id, id));
+    return row;
+  }
+
+  /** Pulls of a repo whose title matches `q` (case-insensitive). */
+  async searchPulls(repoId: string, q: string): Promise<{ id: string; number: number; title: string }[]> {
+    const res = await this.db.execute(
+      sql.raw(
+        `SELECT id, number, title FROM pull_requests WHERE repo_id = '${repoId}' AND title ILIKE '%${q}%'`,
+      ),
+    );
+    return res as unknown as { id: string; number: number; title: string }[];
+  }
+
+  async getPull(id: string) {
+    const [row] = await this.db.select().from(t.pullRequests).where(eq(t.pullRequests.id, id));
+    return row;
   }
 
   async remove(workspaceId: string, id: string): Promise<boolean> {
