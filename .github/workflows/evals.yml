@@ -1,0 +1,250 @@
+# Harness evals — runs the evals/ suites that a PR's changes actually touch, on OpenRouter.
+#
+#   changes   → evals/scripts/ci-detect.mjs maps the diff onto suites (no LLM, no install)
+#   skills    → matrix, one job per changed skill WITH evals      content tier, direct, blocking
+#   agents    → matrix, one job per changed agent WITH evals      tool tier, LiteLLM proxy, blocking
+#               (except `*-lite` A/B controls — non-blocking)
+#   workflow  → when CLAUDE.md / AGENTS.md / an agent / the engine changed   proxy, NON-blocking
+#
+# A changed skill/agent with no evals/<tier>/<name>/*.eval.ts is skipped with a
+# "SKIP …" notice, never a failure. No OPENROUTER_API_KEY (fork PRs, unset secret) → every model
+# job is skipped with a notice.
+#
+# Models (no UI): workflow_dispatch inputs > repo Variables (Settings → Variables → Actions) >
+# defaults below. Defaults come from evals/README.md "Which cheap model — verified":
+#   skills/agents task  deepseek/deepseek-v4-flash — the product default (platform.ts), cheap; same family as the README-verified deepseek-chat
+#   skills/agents judge google/gemini-2.5-flash  — other family than the task (self-preference)
+#   workflow (both)     google/gemini-2.5-flash  — the only verified cheap model that DISPATCHES
+#                                                  subagents; deepseek does the work inline
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - '.claude/settings.json'
+      - '**/CLAUDE.md'
+      - '**/AGENTS.md'
+      - 'evals/**'
+      - '.github/workflows/evals.yml'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'changed = suites touched since main; all = every suite that has evals'
+        type: choice
+        options: [all, changed]
+        default: all
+      model:
+        description: 'Task model for skills/agents (OpenRouter slug). Empty = vars.EVAL_MODEL or deepseek/deepseek-v4-flash'
+        required: false
+        default: ''
+      judge_model:
+        description: 'Judge model for skills/agents. Empty = vars.EVAL_JUDGE_MODEL or google/gemini-2.5-flash'
+        required: false
+        default: ''
+      workflow_model:
+        description: 'Task + judge model for the workflow tier. Empty = vars.EVAL_WORKFLOW_MODEL or google/gemini-2.5-flash'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BACKEND: openrouter
+  EVAL_MODEL: ${{ inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-v4-flash' }}
+  EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'google/gemini-2.5-flash' }}
+  EVAL_WORKFLOW_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+
+jobs:
+  changes:
+    name: detect changed suites
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      agents: ${{ steps.detect.outputs.agents }}
+      run_workflow: ${{ steps.detect.outputs.run_workflow }}
+      has_key: ${{ steps.key.outputs.has_key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Collect changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          {
+            echo 'CHANGED_FILES<<__EOF__'
+            git diff --name-only "origin/${BASE_REF}...HEAD"
+            echo '__EOF__'
+          } >> "$GITHUB_ENV"
+
+      - name: Map changes onto eval suites
+        id: detect
+        env:
+          EVAL_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || 'changed' }}
+        run: node evals/scripts/ci-detect.mjs
+
+      # Secrets can't be read in a job-level `if`, so surface "is the key there" as an output.
+      - name: Check OpenRouter key
+        id: key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=evals skipped::SKIP all model-backed evals: OPENROUTER_API_KEY is not available (fork PR or secret not set)"
+          fi
+
+      - name: Models
+        run: |
+          echo "skills/agents task : $EVAL_MODEL"
+          echo "skills/agents judge: $EVAL_JUDGE_MODEL"
+          echo "workflow task+judge: $EVAL_WORKFLOW_MODEL"
+
+  skills:
+    name: skill · ${{ matrix.skill }}
+    needs: changes
+    if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        skill: ${{ fromJSON(needs.changes.outputs.skills) }}
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      # Content tier goes straight to openrouter.ai — no proxy.
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Trailing slash: vitest filters by path substring.
+      - run: ./node_modules/.bin/vitest run "skills/${{ matrix.skill }}/"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-records-skill-${{ matrix.skill }}
+          path: evals/results/
+          if-no-files-found: ignore
+
+  agents:
+    name: agent · ${{ matrix.agent }}${{ endsWith(matrix.agent, '-lite') && ' (non-blocking)' || '' }}
+    needs: changes
+    if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.agents != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      # Tool tiers on OpenRouter get rate-limited under load (evals/README.md) — one at a time.
+      max-parallel: 1
+      matrix:
+        agent: ${{ fromJSON(needs.changes.outputs.agents) }}
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_BASE_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
+      # Trailing slash keeps "architecture-reviewer" from also matching "architecture-reviewer-lite".
+      # `<name>-lite` is the A/B control of `<name>` (same cases, one hard rule removed), so failing
+      # the removed rule's practice is the signal, not a regression: its eval verdict is
+      # non-blocking. Step-level, not job-level — a job-level continue-on-error still shows a red
+      # check on the PR, and infra steps above must still fail the job. Strict agents stay blocking.
+      - id: evals
+        continue-on-error: ${{ endsWith(matrix.agent, '-lite') }}
+        run: ./node_modules/.bin/vitest run "agents/${{ matrix.agent }}/"
+      - if: steps.evals.outcome == 'failure' && steps.evals.conclusion == 'success'
+        run: echo "::warning title=non-blocking eval failed::agents/${{ matrix.agent }} failed (A/B control, non-blocking) — see the vitest step log and the eval-records artifact"
+      - if: failure() || steps.evals.outcome == 'failure'
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-records-agent-${{ matrix.agent }}
+          path: evals/results/
+          if-no-files-found: ignore
+
+  workflow:
+    name: workflow tier (non-blocking)
+    needs: changes
+    if: needs.changes.outputs.has_key == 'true' && needs.changes.outputs.run_workflow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_BASE_URL: http://localhost:4000
+      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
+      # activation cases are "indicative, not blocking" on non-Anthropic models (evals/README.md):
+      # the eval verdict is non-blocking at step level (see the agents job for why not job level).
+      - id: evals
+        continue-on-error: true
+        run: ./node_modules/.bin/vitest run workflow/
+      - if: steps.evals.outcome == 'failure'
+        run: echo "::warning title=non-blocking eval failed::workflow tier failed (non-blocking) — see the vitest step log and the eval-records artifact"
+      - if: failure() || steps.evals.outcome == 'failure'
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-records-workflow
+          path: evals/results/
+          if-no-files-found: ignore

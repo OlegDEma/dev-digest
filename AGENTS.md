@@ -146,6 +146,9 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   from grep and glob.** A default `rg` skips it (a hidden directory), but `find`,
   `ls`, `Read` by path and `rg --hidden --no-ignore` do not. Listed in
   `.git/info/exclude`; never commit its contents.
+- `.claude/skills/*/evals/fixtures/**` — skill eval inputs: **deliberately
+  broken** code laid out like `server/src/…`. Exclude from grep and glob when
+  looking for real code; never fix them. Layout: `.claude/skill-evals/README.md`.
 - `**/src/vendor/**` — vendored. Exception: `vendor/shared` changes only as part
   of a deliberate contract change.
 - `**/node_modules/**`, `pnpm-lock.yaml`, `package-lock.json`.
@@ -153,11 +156,38 @@ at that module's `README.md` · `docs/` · `specs/` · `INSIGHTS.md` — link, n
   Change `server/src/db/schema.ts`, then `cd server && pnpm db:generate` to emit
   the migration, and `pnpm db:migrate` to apply it.
 
+## Evals (harness regression)
+
+Evals for the **harness itself** (skills, subagents, `CLAUDE.md`) live in `evals/` — its own
+pnpm package (vitest + the Claude Agent SDK), runs on the Claude Code subscription.
+Not to be confused with the product's eval pipeline (`server/src/modules/evals/`).
+
+| You changed | Run before finishing (from `evals/`) |
+| --- | --- |
+| `.claude/skills/**` | `pnpm eval:quality` (static SKILL.md gate, no model) then `pnpm eval:skills` |
+| `.claude/agents/**` | `pnpm eval:agents` |
+| `CLAUDE.md` / `AGENTS.md` | `pnpm eval:workflow` |
+
+**Rule:** after editing any of the paths above, run the matching command and report the pass
+rate in your summary — do not wait to be asked. In `evals/`, `pnpm` is gated like elsewhere:
+use `./node_modules/.bin/vitest run skills` / `agents` / `workflow` and
+`./node_modules/.bin/tsx src/skill-quality.ts` if `pnpm` aborts with `ERR_PNPM_IGNORED_BUILDS`.
+
+- A low pass rate usually means a wrong **criterion** (too narrow, or contradicting the skill's
+  own text), not a bad artifact — read the failing practice and its evidence before editing the
+  skill. A baseline without the skill is not empty here: agents already read `AGENTS.md`.
+- New skill or agent: `pnpm eval:scaffold <name>` (or `--agent <name>`) generates
+  `evals/skills/<name>/{eval.ts,cases.ts,fixtures/}`; one or two cases is enough
+  (`evals/skills/onion-architecture/` is a worked example: violation, near-miss negative, placement).
+- CI runs only the affected sets (`.github/workflows/evals.yml`, `ci-detect.mjs`).
+- Details: [`evals/README.md`](evals/README.md).
+
 ## Read when
 
 - Read `TESTING.md` when adding a test or touching CI.
 - Read `docs/agent-prompts/` when changing a built-in agent's prompt or model.
 - Read a package's own `AGENTS.md` (above) when you start working inside it.
 - Read `INSIGHTS.md` at repo root for decisions that span more than one package.
+- Read `evals/README.md` when you change `.claude/skills`, `.claude/agents`, `CLAUDE.md` or add a skill/agent eval.
 - Use the `engineering-insights` skill to read or record an insight — it maps a
   touched path to the right `INSIGHTS.md` and holds the format and quality bar.

@@ -13,7 +13,10 @@ import type {
   IssueMeta,
   PrTouchingFile,
   HistoryLimits,
+  WorkflowRunMeta,
+  RunArtifactMeta,
 } from '@devdigest/shared';
+import { ArtifactExpiredError } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
@@ -348,6 +351,77 @@ export class OctokitGitHubClient implements GitHubClient {
         TIMEOUT,
       ),
     );
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    workflowFile: string,
+    sinceIso: string,
+  ): Promise<WorkflowRunMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            created: `>=${sinceIso.slice(0, 10)}`,
+            per_page: 100,
+          });
+          return res.data.workflow_runs.map((r) => ({
+            id: String(r.id),
+            conclusion: r.conclusion ?? null,
+            created_at: r.created_at,
+            html_url: r.html_url,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async listRunArtifacts(repo: RepoRef, runId: string): Promise<RunArtifactMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: Number(runId),
+            per_page: 100,
+          });
+          return res.data.artifacts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            expired: a.expired,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async downloadArtifactZip(repo: RepoRef, artifactId: number): Promise<Uint8Array> {
+    try {
+      // The zip URL is a one-minute 302; octokit follows it. 410 = expired.
+      return await withRetry(() =>
+        withTimeout(
+          (async () => {
+            const res = await this.octokit.rest.actions.downloadArtifact({
+              owner: repo.owner,
+              repo: repo.name,
+              artifact_id: artifactId,
+              archive_format: 'zip',
+            });
+            return new Uint8Array(res.data as ArrayBuffer);
+          })(),
+          TIMEOUT,
+        ),
+      );
+    } catch (err) {
+      if ((err as { status?: number }).status === 410) throw new ArtifactExpiredError();
+      throw err;
+    }
   }
 
   async getIssue(repo: RepoRef, n: number): Promise<IssueMeta> {

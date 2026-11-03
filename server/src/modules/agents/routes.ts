@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { CiFailOn, Provider, ReviewStrategy, SetContextDocsBody } from '@devdigest/shared';
+import { AgentStats, CiFailOn, Provider, ReviewStrategy, SetContextDocsBody } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -19,6 +19,8 @@ const VersionParams = z.object({
 /**
  * A2 — agents module (owner A2).
  *   GET    /agents                  → list (workspace-scoped)
+ *   GET    /agents/stats            → per-agent stats, last 30 days (every agent)
+ *   GET    /agents/:id/stats        → one agent's stats
  *   GET    /agents/:id              → one agent
  *   POST   /agents                  → create
  *   PUT    /agents/:id              → update / toggle enabled (versions config)
@@ -76,6 +78,22 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(app.container, req);
     return service.list(workspaceId);
   });
+
+  app.get('/agents/stats', { schema: { response: { 200: z.array(AgentStats) } } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    return service.stats(workspaceId);
+  });
+
+  app.get(
+    '/agents/:id/stats',
+    { schema: { params: IdParams, response: { 200: AgentStats } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const stats = await service.statsFor(workspaceId, req.params.id);
+      if (!stats) throw new NotFoundError('Agent not found');
+      return stats;
+    },
+  );
 
   app.get('/agents/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

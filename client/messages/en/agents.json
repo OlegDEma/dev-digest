@@ -5,7 +5,10 @@
     "delete": "Delete agent",
     "deleteTitle": "Delete agent \"{name}\"?",
     "deleteBody": "Its config, version history and skill bindings are removed with it. This cannot be undone.",
-    "deleteCancel": "Cancel"
+    "deleteCancel": "Cancel",
+    "statsLine": "{runs} runs · {accept} accept · {cost} avg",
+    "statsLoading": "…",
+    "statsUnknown": "—"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -55,6 +58,21 @@
       "ci": "CI",
       "context": "Context"
     }
+  },
+  "stats": {
+    "window": "last 30 days",
+    "loadError": "Could not load stats.",
+    "runs": "Runs",
+    "accept": "Accept %",
+    "dismiss": "Dismiss %",
+    "cost": "Avg cost",
+    "latency": "Avg latency",
+    "severity": "Findings by severity",
+    "critical": "Critical",
+    "warning": "Warning",
+    "suggestion": "Suggestion",
+    "unknown": "—",
+    "percent": "%"
   },
   "config": {
     "title": "Configuration",

@@ -18,6 +18,7 @@ import {
   type Category,
 } from "@devdigest/ui";
 import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
+import { EvalCaseAction } from "./_components/EvalCaseAction";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "../../../../../../../lib/github-urls";
@@ -33,6 +34,7 @@ export function FindingCard({
   headSha,
   targetFindingId,
   targetNonce,
+  agentId,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -45,6 +47,9 @@ export function FindingCard({
    *  others in this panel) so the user lands on the one they clicked. */
   targetFindingId?: string | null;
   targetNonce?: number;
+  /** Producing agent of the finding's review; absent for agent-less reviews,
+   *  which hides "Turn into eval case". */
+  agentId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -119,6 +124,7 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {agentId && <EvalCaseAction finding={f} agentId={agentId} />}
           </div>
         </div>
       )}

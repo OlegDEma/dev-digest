@@ -2,6 +2,7 @@ import type { Container } from '../../platform/container.js';
 import type {
   Agent,
   AgentSkillLink,
+  AgentStats,
   AgentVersion,
   CiFailOn,
   ModelInfo,
@@ -9,8 +10,10 @@ import type {
   ReviewStrategy,
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
+import { AgentStatsRepository } from './repository/agent-stats.repo.js';
 import { validateContextDocs } from '../_shared/doc-path.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { NotFoundError } from '../../platform/errors.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -49,11 +52,69 @@ export interface UpdateAgentInput {
   enabled?: boolean;
 }
 
+/** Look-back window for the per-agent quality stats. */
+const AGENT_STATS_WINDOW_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export class AgentsService {
   private repo: AgentsRepository;
+  private statsRepo: AgentStatsRepository;
 
   constructor(private container: Container) {
     this.repo = new AgentsRepository(container.db);
+    this.statsRepo = new AgentStatsRepository(container.db);
+  }
+
+  /** One stats row per workspace agent (zero-run agents included), last 30 days. */
+  async stats(workspaceId: string): Promise<AgentStats[]> {
+    const [agents, rows] = await Promise.all([
+      this.repo.list(workspaceId),
+      this.statsRepo.aggregate(workspaceId, this.statsSince()),
+    ]);
+    return agents.map((a) => this.toStats(a.id, a.name, rows));
+  }
+
+  async statsFor(workspaceId: string, id: string): Promise<AgentStats | undefined> {
+    const agent = await this.repo.getById(workspaceId, id);
+    if (!agent) return undefined;
+    const rows = await this.statsRepo.aggregate(workspaceId, this.statsSince(), id);
+    return this.toStats(agent.id, agent.name, rows);
+  }
+
+  private statsSince(): Date {
+    return new Date(Date.now() - AGENT_STATS_WINDOW_DAYS * DAY_MS);
+  }
+
+  private toStats(
+    agentId: string,
+    agentName: string,
+    rows: Awaited<ReturnType<AgentStatsRepository['aggregate']>>,
+  ): AgentStats {
+    const run = rows.runs.get(agentId);
+    const f = rows.findings.get(agentId);
+    const runs = run?.runs ?? 0;
+    const accepted = f?.accepted ?? 0;
+    const dismissed = f?.dismissed ?? 0;
+    const pending = f?.pending ?? 0;
+    const total = accepted + dismissed + pending;
+    const acted = accepted + dismissed;
+    return {
+      agent_id: agentId,
+      agent_name: agentName,
+      runs,
+      findings_total: total,
+      accepted,
+      dismissed,
+      pending,
+      accept_rate: acted > 0 ? accepted / acted : null,
+      dismiss_rate: acted > 0 ? dismissed / acted : null,
+      avg_findings_per_run: runs > 0 ? total / runs : null,
+      total_cost_usd: run?.totalCostUsd ?? null,
+      avg_cost_usd: run?.avgCostUsd ?? null,
+      avg_latency_ms: run?.avgDurationMs ?? null,
+      findings_by_severity: f?.bySeverity ?? { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 },
+      trend: [],
+    };
   }
 
   /** Every agent, decorated with how many skills it binds (for the list cards). */
@@ -153,6 +214,13 @@ export class AgentsService {
     return links.map((l) => ({ agent_id: agentId, skill_id: l.skill.id, order: l.order }));
   }
 
+  /** A skill outside the caller's workspace is reported as not found; nothing is linked. */
+  private async requireWorkspaceSkills(workspaceId: string, skillIds: string[]): Promise<void> {
+    const unique = [...new Set(skillIds)];
+    const have = await this.repo.skillIdsInWorkspace(workspaceId, unique);
+    if (unique.some((id) => !have.has(id))) throw new NotFoundError('Skill not found');
+  }
+
   /**
    * Set / reorder the agent's linked skills. If `skillIds` is provided, replaces
    * the whole set in that order. Returns the resulting ordered links.
@@ -164,6 +232,7 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.requireWorkspaceSkills(workspaceId, skillIds);
     await this.repo.setSkills(agentId, skillIds);
     return this.skillLinks(agentId);
   }
@@ -177,6 +246,7 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.requireWorkspaceSkills(workspaceId, [skillId]);
     const existing = await this.repo.linkedSkills(agentId);
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);

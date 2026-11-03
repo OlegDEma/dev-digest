@@ -18,6 +18,8 @@ import type {
   CommitFilesPayload,
   IssueMeta,
   PrTouchingFile,
+  WorkflowRunMeta,
+  RunArtifactMeta,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -33,6 +35,7 @@ import type {
   SecretsProvider,
   SecretKey,
 } from '@devdigest/shared';
+import { ArtifactExpiredError } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
 /**
@@ -130,6 +133,16 @@ export interface MockGitHubOptions {
   files?: Record<string, string>;
   /** Rows returned by listPrsTouchingFiles (default none). */
   prsTouchingFiles?: PrTouchingFile[];
+  /** Workflow runs returned by listWorkflowRuns (default none). */
+  workflowRuns?: WorkflowRunMeta[];
+  /** run id → artifacts returned by listRunArtifacts (default none). */
+  runArtifacts?: Record<string, RunArtifactMeta[]>;
+  /** artifact id → zip bytes (or `'expired'` → ArtifactExpiredError) for downloadArtifactZip. */
+  artifactZips?: Record<number, Uint8Array | 'expired'>;
+  /** When set, every GitHub Actions read throws this message. */
+  actionsError?: string;
+  /** When set, commitFiles throws this message. */
+  commitError?: string;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -226,6 +239,7 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async commitFiles(_repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }> {
+    if (this.opts.commitError) throw new Error(this.opts.commitError);
     this.committed.push(payload);
     return { branch: payload.branch };
   }
@@ -233,6 +247,28 @@ export class MockGitHubClient implements GitHubClient {
   async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
     const pr = this.openedPrs.find((p) => p.head === branch);
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
+  }
+
+  async listWorkflowRuns(
+    _repo: RepoRef,
+    _workflowFile: string,
+    _sinceIso: string,
+  ): Promise<WorkflowRunMeta[]> {
+    if (this.opts.actionsError) throw new Error(this.opts.actionsError);
+    return this.opts.workflowRuns ?? [];
+  }
+
+  async listRunArtifacts(_repo: RepoRef, runId: string): Promise<RunArtifactMeta[]> {
+    if (this.opts.actionsError) throw new Error(this.opts.actionsError);
+    return this.opts.runArtifacts?.[runId] ?? [];
+  }
+
+  async downloadArtifactZip(_repo: RepoRef, artifactId: number): Promise<Uint8Array> {
+    if (this.opts.actionsError) throw new Error(this.opts.actionsError);
+    const zip = this.opts.artifactZips?.[artifactId];
+    if (zip === 'expired') throw new ArtifactExpiredError();
+    if (!zip) throw new Error('Not Found');
+    return zip;
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {

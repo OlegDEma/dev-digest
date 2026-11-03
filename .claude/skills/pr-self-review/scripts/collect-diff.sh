@@ -5,6 +5,7 @@
 #
 # Usage: collect-diff.sh [base]        base defaults to main / origin/main (or $BASE)
 # Excludes: node_modules, lockfiles, server/clones, db/migrations (generated),
+#           skill eval fixtures (.claude/skills/*/evals/fixtures — deliberately broken code),
 #           and vendor/** EXCEPT vendor/shared/** (a deliberate contract change).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -26,5 +27,5 @@ fi
   git status --porcelain=v1 --untracked-files=all | sed -e 's/^...//' -e 's/.* -> //'
 } \
   | sort -u \
-  | grep -vE '(^|/)node_modules/|(^|/)\.git/|(^|/)pnpm-lock\.yaml$|(^|/)package-lock\.json$|^server/clones/|(^|/)db/migrations/' \
+  | grep -vE '(^|/)node_modules/|(^|/)\.git/|(^|/)pnpm-lock\.yaml$|(^|/)package-lock\.json$|^server/clones/|(^|/)db/migrations/|^\.claude/skills/[^/]+/evals/fixtures/' \
   | awk '!( ( $0 ~ /(^|\/)vendor\// ) && ( $0 !~ /(^|\/)vendor\/shared\// ) )'

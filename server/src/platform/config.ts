@@ -29,6 +29,12 @@ const EnvSchema = z.object({
   // Comma list of folder names that make a markdown file project-context
   // eligible (default specs,docs,insights).
   PROJECT_CONTEXT_BUCKETS: z.string().optional(),
+  // The action reference the generated CI workflow `uses:` (not a secret). The
+  // tag must exist, with the built runner committed, in the target's reach.
+  DEVDIGEST_RUNNER_REF: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().default('OlegDEma/dev-digest/agent-runner@<tag>'),
+  ),
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
@@ -61,6 +67,8 @@ export type AppConfig = {
   secretsPath: string;
   nodeEnv: 'development' | 'test' | 'production';
   logLevel: string;
+  /** `uses:` reference of the agent-runner action written into generated CI workflows. */
+  runnerRef: string;
   /** Allowed CORS origin for the Next.js dev server. */
   webOrigin: string;
   /** Whether memory/RAG embeddings (OpenAI) are enabled. Default false. */
@@ -123,6 +131,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     secretsPath: join(homedir(), '.devdigest', 'secrets.json'),
     nodeEnv: parsed.NODE_ENV,
     logLevel: parsed.LOG_LEVEL ?? (parsed.NODE_ENV === 'test' ? 'silent' : 'info'),
+    runnerRef: parsed.DEVDIGEST_RUNNER_REF,
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',

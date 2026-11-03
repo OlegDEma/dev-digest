@@ -13,3 +13,5 @@ export * from "./blast";
 export * from "./history";
 export * from "./project-context";
 export * from "./onboarding";
+export * from "./evals";
+export * from "./ci";

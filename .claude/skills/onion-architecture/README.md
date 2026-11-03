@@ -20,18 +20,24 @@ This skill owns only the **boundaries between rings**.
 
 | File | Purpose |
 | --- | --- |
-| [`SKILL.md`](SKILL.md) | The brain: the five rings mapped to our files, the seven rules, the "where does this go?" decision path. Loads on trigger. |
+| [`SKILL.md`](SKILL.md) | The brain: the five rings mapped to our files, the ten rules, the "where does this go?" decision path. Loads on trigger. |
 | [`references/layermap.md`](references/layermap.md) | Every ring mapped to real paths; the `reviews/` reference module; the deviations we're paying down. |
 | [`references/enforcement.md`](references/enforcement.md) | The dependency-cruiser ruleset, CI wiring (`pnpm arch:check`), grep checks, and the migrate-a-leaky-module recipe. |
 | [`references/examples.md`](references/examples.md) | Good vs. bad on our own modules (`reviews/` ✅ vs. `pulls/` ❌). |
 | [`references/sources.md`](references/sources.md) | Why each rule holds + the full reading list. |
+| [`evals/eval.md`](evals/eval.md) | The eval: how to run it, the task prompt given to the executor, the grading rules. |
+| [`evals/expected-findings.json`](evals/expected-findings.json) | Answer key: 16 required + 2 optional findings (`file`, `anchors`, `rule`, fix) and the `must_not_flag` files. |
+| `evals/fixtures/` | Hermetic, typechecking backend slice (`platform/`, `contracts/`, `adapters/`, `db/` + new `notifications/`, `digests/`, `reviewer-core/calibration/` with planted leaks, no hint comments). Never import or "fix" it. Run results go to [`.claude/skill-evals/`](../../skill-evals/README.md). |
 
 ## The rules, in one breath
 
 1. Dependencies point inward — always. 2. Drizzle only in repositories. 3. External
 I/O only through a container port. 4. Zod validation at the rim. 5. Logic not in the
 route, not in the repository. 6. Contracts change in `@devdigest/shared` first.
-7. A thin module is a decision, not laziness.
+7. A thin module is a decision, not laziness. 8. Deferred, scheduled and
+cross-module work goes through `container.jobs` — no timers, no service-to-service calls.
+9. A module's `index.ts` publishes its API only — never its repository.
+10. Module→module imports only along the allow-list in `references/layermap.md`.
 
 ## Enforcement at a glance
 

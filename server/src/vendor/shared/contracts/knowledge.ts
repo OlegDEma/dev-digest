@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Conformance, Eval, Memory, Conventions, Skills,
@@ -49,16 +50,125 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+export const EvalExpectationKind = z.enum(['must_find', 'must_not_flag']);
+export type EvalExpectationKind = z.infer<typeof EvalExpectationKind>;
+
+export const EvalExpectation = z
+  .object({
+    kind: EvalExpectationKind,
+    file: z.string().min(1),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1),
+  })
+  .refine((e) => e.end_line >= e.start_line, {
+    message: 'end_line must be >= start_line',
+    path: ['end_line'],
+  });
+export type EvalExpectation = z.infer<typeof EvalExpectation>;
+
+export const EvalCaseStatus = z.enum(['pass', 'fail', 'error']);
+export type EvalCaseStatus = z.infer<typeof EvalCaseStatus>;
+
+/**
+ * One expected finding of an agent eval case. `must_find` needs severity and
+ * category (strict match); `must_not_flag` is location-only unless they are set.
+ * An empty list means the agent must stay silent.
+ */
+export const EvalExpectedItem = z
+  .object({
+    kind: EvalExpectationKind.default('must_find'),
+    file: z.string().min(1).max(300),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1).optional(),
+    severity: Severity.optional(),
+    category: FindingCategory.optional(),
+    /** Display only — never matched. */
+    title: z.string().max(200).optional(),
+  })
+  .strict()
+  .superRefine((item, ctx) => {
+    if (item.end_line !== undefined && item.end_line < item.start_line) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'end_line must be >= start_line',
+        path: ['end_line'],
+      });
+    }
+    if (item.kind === 'must_find') {
+      if (item.severity === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'severity is required for must_find',
+          path: ['severity'],
+        });
+      }
+      if (item.category === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'category is required for must_find',
+          path: ['category'],
+        });
+      }
+    }
+  });
+export type EvalExpectedItem = z.infer<typeof EvalExpectedItem>;
+
+export const EvalExpectedList = z.array(EvalExpectedItem);
+export type EvalExpectedList = z.infer<typeof EvalExpectedList>;
+
+/** An extra file shown to the agent as untrusted context (path unique per case). */
+export const EvalCaseInputFile = z.object({
+  path: z.string().min(1).max(300),
+  content: z.string(),
+});
+export type EvalCaseInputFile = z.infer<typeof EvalCaseInputFile>;
+
+export const EvalPrMeta = z.object({
+  title: z.string().max(200),
+  description: z.string().max(8000),
+});
+export type EvalPrMeta = z.infer<typeof EvalPrMeta>;
+
+/** An agent eval case (response shape). */
 export const EvalCase = z.object({
   id: z.string(),
-  owner_kind: EvalOwnerKind,
+  owner_kind: z.literal('agent'),
   owner_id: z.string(),
   name: z.string(),
+  expected: EvalExpectedList,
+  /** Copied from the finding for display only — never used in matching. Null for hand-written cases. */
+  display: z
+    .object({
+      title: z.string(),
+      severity: Severity,
+      category: FindingCategory,
+    })
+    .nullable(),
   input_diff: z.string(),
-  input_files: z.unknown(),
-  input_meta: z.unknown(),
-  expected_output: z.unknown(),
-  notes: z.string().nullish(),
+  input_files: z.array(EvalCaseInputFile),
+  pr_meta: EvalPrMeta,
+  source: z
+    .object({
+      finding_id: z.string().nullable(),
+      pr_number: z.number().int(),
+      repo: z.string(),
+    })
+    .nullable(),
+  /** Bumped by every content edit (diff, files, PR meta, expected); a rename keeps it. */
+  revision: z.number().int().min(1),
+  created_at: z.string(),
+  updated_at: z.string(),
+  last_result: z
+    .object({
+      run_id: z.string(),
+      status: EvalCaseStatus,
+      ran_at: z.string(),
+      summary: z.string(),
+      duration_ms: z.number().int().nullable(),
+      cost_usd: z.number().nullable(),
+      case_revision: z.number().int(),
+    })
+    .nullable(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;
 

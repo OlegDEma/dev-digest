@@ -1,0 +1,43 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for the Publish-to-CI dialog. */
+export const s = {
+  overlay: { position: "fixed", inset: 0, display: "grid", placeItems: "center", zIndex: 50, padding: 28 } satisfies CSSProperties,
+  backdrop: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" } satisfies CSSProperties,
+  dialog: {
+    position: "relative",
+    width: 720,
+    maxWidth: "100%",
+    maxHeight: "92%",
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: 14,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    outline: "none",
+  } satisfies CSSProperties,
+  header: { padding: "16px 24px", borderBottom: "1px solid var(--border)" } satisfies CSSProperties,
+  title: { fontSize: 16, fontWeight: 700, margin: 0 } satisfies CSSProperties,
+  subtitle: { fontSize: 13, color: "var(--text-secondary)", marginTop: 2 } satisfies CSSProperties,
+  body: { padding: "18px 24px", overflow: "auto", display: "flex", flexDirection: "column", gap: 14 } satisfies CSSProperties,
+  field: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13 } satisfies CSSProperties,
+  label: { fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "var(--text-muted)" } satisfies CSSProperties,
+  input: {
+    padding: "6px 8px",
+    background: "var(--bg-surface)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+  } satisfies CSSProperties,
+  row: { display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" } satisfies CSSProperties,
+  file: { border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" } satisfies CSSProperties,
+  filePath: { padding: "6px 10px", fontSize: 12, fontWeight: 600, background: "var(--bg-surface)" } satisfies CSSProperties,
+  pre: { margin: 0, padding: 10, fontSize: 12, maxHeight: 220, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" } satisfies CSSProperties,
+  note: { fontSize: 12, color: "var(--text-secondary)" } satisfies CSSProperties,
+  warn: { fontSize: 13, color: "var(--warn)" } satisfies CSSProperties,
+  error: { fontSize: 13, color: "var(--crit)" } satisfies CSSProperties,
+  ok: { fontSize: 14, fontWeight: 600, color: "var(--ok)" } satisfies CSSProperties,
+  link: { color: "var(--accent)" } satisfies CSSProperties,
+  footer: { display: "flex", justifyContent: "flex-end", gap: 10, padding: "12px 24px", borderTop: "1px solid var(--border)" } satisfies CSSProperties,
+};

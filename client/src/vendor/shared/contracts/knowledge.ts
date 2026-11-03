@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Conformance, Eval, Memory, Conventions, Skills,
@@ -49,16 +50,125 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+export const EvalExpectationKind = z.enum(['must_find', 'must_not_flag']);
+export type EvalExpectationKind = z.infer<typeof EvalExpectationKind>;
+
+export const EvalExpectation = z
+  .object({
+    kind: EvalExpectationKind,
+    file: z.string().min(1),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1),
+  })
+  .refine((e) => e.end_line >= e.start_line, {
+    message: 'end_line must be >= start_line',
+    path: ['end_line'],
+  });
+export type EvalExpectation = z.infer<typeof EvalExpectation>;
+
+export const EvalCaseStatus = z.enum(['pass', 'fail', 'error']);
+export type EvalCaseStatus = z.infer<typeof EvalCaseStatus>;
+
+/**
+ * One expected finding of an agent eval case. `must_find` needs severity and
+ * category (strict match); `must_not_flag` is location-only unless they are set.
+ * An empty list means the agent must stay silent.
+ */
+export const EvalExpectedItem = z
+  .object({
+    kind: EvalExpectationKind.default('must_find'),
+    file: z.string().min(1).max(300),
+    start_line: z.number().int().min(1),
+    end_line: z.number().int().min(1).optional(),
+    severity: Severity.optional(),
+    category: FindingCategory.optional(),
+    /** Display only — never matched. */
+    title: z.string().max(200).optional(),
+  })
+  .strict()
+  .superRefine((item, ctx) => {
+    if (item.end_line !== undefined && item.end_line < item.start_line) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'end_line must be >= start_line',
+        path: ['end_line'],
+      });
+    }
+    if (item.kind === 'must_find') {
+      if (item.severity === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'severity is required for must_find',
+          path: ['severity'],
+        });
+      }
+      if (item.category === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'category is required for must_find',
+          path: ['category'],
+        });
+      }
+    }
+  });
+export type EvalExpectedItem = z.infer<typeof EvalExpectedItem>;
+
+export const EvalExpectedList = z.array(EvalExpectedItem);
+export type EvalExpectedList = z.infer<typeof EvalExpectedList>;
+
+/** An extra file shown to the agent as untrusted context (path unique per case). */
+export const EvalCaseInputFile = z.object({
+  path: z.string().min(1).max(300),
+  content: z.string(),
+});
+export type EvalCaseInputFile = z.infer<typeof EvalCaseInputFile>;
+
+export const EvalPrMeta = z.object({
+  title: z.string().max(200),
+  description: z.string().max(8000),
+});
+export type EvalPrMeta = z.infer<typeof EvalPrMeta>;
+
+/** An agent eval case (response shape). */
 export const EvalCase = z.object({
   id: z.string(),
-  owner_kind: EvalOwnerKind,
+  owner_kind: z.literal('agent'),
   owner_id: z.string(),
   name: z.string(),
+  expected: EvalExpectedList,
+  /** Copied from the finding for display only — never used in matching. Null for hand-written cases. */
+  display: z
+    .object({
+      title: z.string(),
+      severity: Severity,
+      category: FindingCategory,
+    })
+    .nullable(),
   input_diff: z.string(),
-  input_files: z.unknown(),
-  input_meta: z.unknown(),
-  expected_output: z.unknown(),
-  notes: z.string().nullish(),
+  input_files: z.array(EvalCaseInputFile),
+  pr_meta: EvalPrMeta,
+  source: z
+    .object({
+      finding_id: z.string().nullable(),
+      pr_number: z.number().int(),
+      repo: z.string(),
+    })
+    .nullable(),
+  /** Bumped by every content edit (diff, files, PR meta, expected); a rename keeps it. */
+  revision: z.number().int().min(1),
+  created_at: z.string(),
+  updated_at: z.string(),
+  last_result: z
+    .object({
+      run_id: z.string(),
+      status: EvalCaseStatus,
+      ran_at: z.string(),
+      summary: z.string(),
+      duration_ms: z.number().int().nullable(),
+      cost_usd: z.number().nullable(),
+      case_revision: z.number().int(),
+    })
+    .nullable(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;
 
@@ -253,6 +363,8 @@ export const ConventionSkillDraft = z.object({
 export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
 
 // ---- Agents ----
+// 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a
+// custom baseURL) — used by the CI runner for cheap models (DeepSeek/GLM/MiniMax).
 export const Provider = z.enum(['openai', 'anthropic', 'openrouter']);
 export type Provider = z.infer<typeof Provider>;
 
@@ -263,8 +375,12 @@ export type Provider = z.infer<typeof Provider>;
 export const ReviewStrategy = z.enum(['single-pass', 'map-reduce', 'auto']);
 export type ReviewStrategy = z.infer<typeof ReviewStrategy>;
 
-// CI gate policy — when a CI review should BLOCK (REQUEST_CHANGES + fail the
-// check) vs just comment. Deterministic from severities; acted on ONLY in CI.
+// CI gate policy — when a review should BLOCK (REQUEST_CHANGES + fail the check)
+// vs just comment. Deterministic from finding severities, NOT the model's verdict:
+//  - never:    never block, always comment (advisory only)
+//  - critical: block iff >=1 CRITICAL finding (default)
+//  - warning:  block iff >=1 WARNING or CRITICAL finding
+//  - any:      block iff >=1 finding of any severity
 export const CiFailOn = z.enum(['never', 'critical', 'warning', 'any']);
 export type CiFailOn = z.infer<typeof CiFailOn>;
 
@@ -297,3 +413,28 @@ export const AgentSkillLink = z.object({
   order: z.number().int(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
+
+// The immutable config snapshot captured in `agent_versions` whenever an agent's
+// config changes (everything but `enabled`). Mirrors the shape written by the
+// agents repository — provider/model/prompt/output_schema/strategy/gate/repo_intel
+// plus the ordered skill ids linked at snapshot time. Used for reproducibility
+// (eval replays a past version) and for surfacing an agent's edit history.
+export const AgentVersionConfig = z.object({
+  provider: Provider,
+  model: z.string(),
+  system_prompt: z.string(),
+  output_schema: z.unknown().nullish(),
+  strategy: ReviewStrategy,
+  ci_fail_on: CiFailOn,
+  repo_intel: z.boolean(),
+  skills: z.array(z.string()),
+});
+export type AgentVersionConfig = z.infer<typeof AgentVersionConfig>;
+
+export const AgentVersion = z.object({
+  agent_id: z.string(),
+  version: z.number().int(),
+  config: AgentVersionConfig,
+  created_at: z.string(),
+});
+export type AgentVersion = z.infer<typeof AgentVersion>;

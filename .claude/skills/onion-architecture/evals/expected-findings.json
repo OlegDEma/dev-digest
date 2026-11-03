@@ -1,0 +1,421 @@
+{
+  "skill": "onion-architecture",
+  "version": 7,
+  "fixtures": "fixtures",
+  "in_scope": [
+    "notifications/",
+    "digests/",
+    "reviewer-core/calibration/",
+    "reviews/hooks.ts",
+    "reviews/rerun.ts",
+    "reviews/with-timeout.ts",
+    "reviews/index.ts",
+    "notifications/run-summary.ts",
+    "digests/staleness.ts",
+    "notifications/defaults.ts"
+  ],
+  "line_tolerance": 2,
+  "pass": {
+    "min_recall": 0.8,
+    "max_blocking_false_positives": 0,
+    "max_nit_false_positives": 2,
+    "min_severity_floor_met": 0.75
+  },
+  "findings": [
+    {
+      "id": "notifications-drizzle-in-route",
+      "required": true,
+      "rule": 2,
+      "file": "notifications/routes.ts",
+      "anchors": [
+        3,
+        5,
+        23
+      ],
+      "summary": "GET handler imports drizzle-orm and db/schema and queries notificationRules through app.container.db directly; the route also maps rows to DTOs.",
+      "fix": "Move the query to notifications/repository (listRules), expose it via NotificationService, route only calls the service.",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "notifications-sdk-in-service",
+      "required": true,
+      "rule": 3,
+      "file": "notifications/service.ts",
+      "anchors": [
+        1,
+        20
+      ],
+      "summary": "Service constructs an Octokit client itself with process.env.GITHUB_TOKEN instead of using the GitHubClient port.",
+      "fix": "Use `await this.container.github()` and `createIssueComment` from the GitHubClient port; the token comes from SecretsProvider.",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "notifications-hand-rolled-body-parse",
+      "required": true,
+      "rule": 4,
+      "file": "notifications/routes.ts",
+      "anchors": [
+        44
+      ],
+      "summary": "POST handler validates the body with NotificationRuleInput.parse(req.body) instead of declaring it in the route schema.",
+      "fix": "Add `body: NotificationRuleInput` to the route `schema` so invalid input is rejected 422 before the handler.",
+      "min_severity": "should-fix"
+    },
+    {
+      "id": "core-imports-persistence",
+      "required": true,
+      "rule": 1,
+      "file": "reviewer-core/calibration/calibrate.ts",
+      "anchors": [
+        4,
+        6,
+        7,
+        32
+      ],
+      "summary": "The domain core imports drizzle-orm, db/client and db/schema, creates a DB handle (line 32) and queries history itself.",
+      "fix": "Compute dismiss stats in a server repository and pass them into a pure calibrateFindings(findings, stats, config).",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "core-constructs-llm-sdk",
+      "required": true,
+      "rule": 3,
+      "file": "reviewer-core/calibration/calibrate.ts",
+      "anchors": [
+        3,
+        71
+      ],
+      "summary": "The domain core imports @anthropic-ai/sdk and builds a client from process.env.ANTHROPIC_API_KEY instead of receiving an LLMProvider.",
+      "fix": "Accept an injected LLMProvider (contracts/ports.ts) as a parameter and call llm.complete().",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "core-filesystem-config",
+      "required": true,
+      "rule": 1,
+      "file": "reviewer-core/calibration/calibrate.ts",
+      "anchors": [
+        1,
+        35
+      ],
+      "summary": "The domain core reads calibration.config.json from disk (readFileSync + process.cwd()).",
+      "fix": "Pass CalibrationConfig in as an argument; load and validate it in the server.",
+      "min_severity": "should-fix"
+    },
+    {
+      "id": "digests-fastify-in-service",
+      "required": true,
+      "rule": 5,
+      "file": "digests/service.ts",
+      "anchors": [
+        1,
+        8,
+        9,
+        28,
+        29
+      ],
+      "summary": "Service takes FastifyRequest/FastifyReply, resolves context from the request and sets status codes and headers.",
+      "fix": "Service takes plain arguments (workspaceId, repoId, window); routes.ts owns getContext, status codes and headers.",
+      "min_severity": "should-fix"
+    },
+    {
+      "id": "digests-logic-and-llm-in-repository",
+      "required": true,
+      "rule": 5,
+      "file": "digests/repository.ts",
+      "anchors": [
+        75,
+        77,
+        78
+      ],
+      "summary": "buildAndSaveDigest runs the whole use case in the data-access layer: aggregation, the health classification (line 75) and an LLM call via container.llm (line 77).",
+      "fix": "Repository keeps only queries/insert; orchestration and the LLM call move to DigestService, the health rule to a pure helper.",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "digests-cross-module-repository-import",
+      "required": true,
+      "rule": 1,
+      "file": "digests/repository.ts",
+      "anchors": [
+        5,
+        67
+      ],
+      "summary": "Imports listRunsForPull from another module's internals (../reviews/repository/run.repo.js).",
+      "fix": "Go through the reviews module's public API (its repository facade/service) or a shared query in db/rows, not a deep import.",
+      "min_severity": "should-fix"
+    },
+    {
+      "id": "digests-repository-takes-container",
+      "required": false,
+      "rule": 3,
+      "file": "digests/repository.ts",
+      "anchors": [
+        23
+      ],
+      "summary": "DigestRepository is constructed with the whole Container rather than a Db handle, which is what lets the LLM call leak in.",
+      "fix": "Construct it as `new DigestRepository(container.db)`."
+    },
+    {
+      "id": "digests-timer-scheduler",
+      "required": true,
+      "rule": 8,
+      "file": "digests/scheduler.ts",
+      "anchors": [
+        12
+      ],
+      "summary": "Weekly digests are scheduled with an in-process setInterval started from route registration (digests/routes.ts:16): lost on restart, runs once per API instance, failures swallowed by .catch(() => {}).",
+      "fix": "Register a `digests.weekly` job kind on container.jobs and trigger it from the platform scheduler/poller; the handler calls DigestService.",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "reviews-hook-calls-notifications-service",
+      "required": true,
+      "rule": 8,
+      "file": "reviews/hooks.ts",
+      "anchors": [
+        2,
+        5,
+        6
+      ],
+      "summary": "The reviews module imports and instantiates NotificationService to react to a finished review, fire-and-forget with errors swallowed — a direct module-to-module dependency that will become a cycle.",
+      "fix": "reviews enqueues a `review.completed` job (container.jobs.enqueue); notifications registers the handler for it. Neither module imports the other.",
+      "min_severity": "blocker"
+    },
+    {
+      "id": "notifications-settimeout-retry",
+      "required": true,
+      "rule": 8,
+      "file": "notifications/service.ts",
+      "anchors": [
+        70,
+        71
+      ],
+      "summary": "A failed GitHub comment is retried with an in-memory setTimeout that re-runs the whole notifyForReview: lost on restart, re-posts comments for rules that already succeeded, errors swallowed.",
+      "fix": "Post each comment as a job (container.jobs.enqueue) and rely on JobRunner's persisted retries/backoff; the service does not schedule its own retries.",
+      "min_severity": "should-fix"
+    },
+    {
+      "id": "digests-scheduler-drizzle",
+      "required": false,
+      "rule": 2,
+      "file": "digests/scheduler.ts",
+      "anchors": [
+        20
+      ],
+      "summary": "scheduler.ts queries t.repos through container.db outside a repository.",
+      "fix": "Add a repository method (e.g. listReposForDigest) and call it."
+    },
+    {
+      "id": "reviews-barrel-exports-repository",
+      "required": true,
+      "rule": 9,
+      "file": "reviews/index.ts",
+      "anchors": [
+        3
+      ],
+      "min_severity": "should-fix",
+      "summary": "The reviews barrel re-exports its data access with `export * from './repository/run.repo.js'`, publishing every query function (and anything added later) as the module's public API.",
+      "fix": "Export only the public API (services/types); drop the repository re-export and the blanket `export *`."
+    },
+    {
+      "id": "notifications-imports-reviews-repo-via-barrel",
+      "required": true,
+      "rule": 9,
+      "file": "notifications/run-summary.ts",
+      "anchors": [
+        2,
+        10
+      ],
+      "min_severity": "should-fix",
+      "summary": "notifications imports the reviews query function listRunsForPull through `../reviews/index.js` and calls it with its own Db — reaching into another module's data layer via the barrel.",
+      "fix": "Get run totals through a reviews service method (or a deliberate shared query in db/rows), not the reviews repository."
+    },
+    {
+      "id": "digests-imports-repo-intel-off-allowlist",
+      "required": true,
+      "rule": 10,
+      "file": "digests/staleness.ts",
+      "anchors": [
+        1
+      ],
+      "min_severity": "should-fix",
+      "summary": "digests imports from the repo-intel module (STALE_INDEX_AFTER_MS, RepoIndexStatus via ../repo-intel/index.js). digests → repo-intel is not an allowed cross-module edge.",
+      "fix": "Either get the index status through a port/service the platform exposes, move the shared constant/type to @devdigest/shared, or add a reviewed digests → repo-intel row to the allow-list in the same PR."
+    },
+    {
+      "id": "notifications-imports-settings-off-allowlist",
+      "required": true,
+      "rule": 10,
+      "file": "notifications/defaults.ts",
+      "anchors": [
+        2
+      ],
+      "min_severity": "should-fix",
+      "summary": "notifications imports DEFAULT_MIN_SEVERITY from the settings module (../settings/index.js). notifications → settings is not an allowed cross-module edge.",
+      "fix": "Move the default to @devdigest/shared or the notifications module's own constants, or add a reviewed notifications → settings row to the allow-list."
+    }
+  ],
+  "must_not_flag": [
+    {
+      "file": "notifications/repository.ts",
+      "forbidden_claims": [
+        "The facade over repository/*.repo.ts breaks the layering, or must be deleted/bypassed for architectural reasons."
+      ],
+      "allowed": [
+        "Renaming it (e.g. to repository/index.ts) or other naming/style remarks."
+      ],
+      "reason": "Facade over *.repo.ts — the correct data-access home."
+    },
+    {
+      "file": "notifications/repository/rule.repo.ts",
+      "forbidden_claims": [
+        "Drizzle/DB access in this file is a layering violation.",
+        "Reading the repos table from this repository breaks a module boundary."
+      ],
+      "allowed": [
+        "The repo-exists check is duplicated and could be shared or reused from the repos module."
+      ],
+      "reason": "Drizzle inside a repository is the rule; a read-only lookup in the module's own repository is allowed."
+    },
+    {
+      "file": "notifications/repository/review.repo.ts",
+      "forbidden_claims": [
+        "Joining reviews/pull_requests/repos/findings from this repository is a layering or module-boundary violation."
+      ],
+      "allowed": [
+        "Suggesting a shared/public query in the reviews module as a refactor."
+      ],
+      "reason": "Read-only cross-table query inside the module's own repository."
+    },
+    {
+      "file": "platform/container.ts",
+      "forbidden_claims": [
+        "Importing or constructing concrete adapters here is a violation."
+      ],
+      "allowed": [],
+      "reason": "Composition root — the one place allowed to import concrete adapters."
+    },
+    {
+      "file": "adapters/github/octokit.ts",
+      "forbidden_claims": [
+        "Importing the Octokit SDK here is a violation."
+      ],
+      "allowed": [],
+      "reason": "Adapter ring: SDK imports belong here."
+    },
+    {
+      "file": "adapters/llm/anthropic.ts",
+      "forbidden_claims": [
+        "Importing the Anthropic SDK here is a violation."
+      ],
+      "allowed": [],
+      "reason": "Adapter ring: SDK imports belong here."
+    },
+    {
+      "file": "reviews/repository/run.repo.ts",
+      "forbidden_claims": [
+        "This existing file itself has a layering problem."
+      ],
+      "allowed": [
+        "Being the target of digests' cross-module import (that finding is on digests/repository.ts)."
+      ],
+      "reason": "Existing code, out of scope."
+    },
+    {
+      "file": "platform/jobs.ts",
+      "forbidden_claims": [
+        "`void done.catch(() => {})` in JobRunner is a swallowed fire-and-forget that violates the rules."
+      ],
+      "allowed": [],
+      "reason": "The JobRunner port itself; that catch is the documented failure sink for enqueued jobs."
+    },
+    {
+      "file": "reviews/rerun.ts",
+      "forbidden_claims": [
+        "The fire-and-forget `void this.executor.execute(...).catch(...)` must go through container.jobs / is a swallowed fire-and-forget violation.",
+        "The run should be enqueued as a job instead of started on the executor."
+      ],
+      "allowed": [
+        "ReviewRerunService could be a method of ReviewService / live in service.ts.",
+        "It should go through the repository facade.",
+        "Missing workspace/tenancy check on prId.",
+        "The insert can outlive the timeout and leave a running row.",
+        "failAgentRun itself can reject unhandled.",
+        "Nothing calls it yet (orphan / unwired)."
+      ],
+      "reason": "Sanctioned fire-and-forget: agent_runs row created first, failure recorded by failAgentRun, stale runs reaped on boot (platform/boot.ts)."
+    },
+    {
+      "file": "reviews/with-timeout.ts",
+      "forbidden_claims": [
+        "Its setTimeout violates the no-timers rule / is scheduling or a hand-rolled retry / must use the JobRunner."
+      ],
+      "allowed": [
+        "Moving the utility to platform/ or a shared place."
+      ],
+      "reason": "setTimeout used as a cleared, awaited deadline — not scheduling and not a retry."
+    },
+    {
+      "file": "repo-intel/index.ts",
+      "forbidden_claims": [
+        "This barrel exposes internals / violates the public-API rule."
+      ],
+      "allowed": [],
+      "reason": "Existing code: explicit exports of types and constants only."
+    },
+    {
+      "file": "settings/index.ts",
+      "forbidden_claims": [
+        "This barrel exposes internals / violates the public-API rule."
+      ],
+      "allowed": [],
+      "reason": "Existing code: explicit export of two constants."
+    }
+  ],
+  "severity_scale": {
+    "blocker": [
+      "CRITICAL",
+      "BLOCKER",
+      "HIGH",
+      "🔴",
+      "не мерджити",
+      "БЛОКУЄ",
+      "БЛОКЕР",
+      "БЛОКУЄ МЕРДЖ",
+      "КРИТИЧНО"
+    ],
+    "should-fix": [
+      "WARNING",
+      "MAJOR",
+      "MEDIUM",
+      "🟡",
+      "should fix",
+      "must fix",
+      "MUST-FIX",
+      "ТРЕБА ВИПРАВИТИ",
+      "ВИПРАВИТИ",
+      "ВАЖЛИВО",
+      "ПОПЕРЕДЖЕННЯ"
+    ],
+    "nit": [
+      "SUGGESTION",
+      "MINOR",
+      "LOW",
+      "NIT",
+      "🔵",
+      "INFO",
+      "ДРІБНИЦЯ",
+      "ДРІБНЕ",
+      "ПОРАДА",
+      "ПРОПОЗИЦІЯ"
+    ],
+    "note": "Labels are matched case-insensitively. If the review defines its own legend (e.g. 'blocker / must-fix / nit'), its tier order wins over this list. An unlabeled finding takes the level of its section (e.g. 'Блокує мердж' → blocker). Severity floor is met when the given level ≥ min_severity (blocker > should-fix > nit)."
+  },
+  "false_positive_levels": {
+    "scope": "Only statements that assert one of a file's `forbidden_claims` (same meaning, any wording or language) are false positives. Anything in that file's `allowed` list, and any other opinion about the file that does not assert a forbidden claim, is not counted. One statement covering two files counts once per file whose forbidden claim it asserts.",
+    "blocking": "A forbidden claim given at blocker or should-fix level (or unlabeled inside a blocking/should-fix section).",
+    "nit": "A forbidden claim given at nit level or hedged as a suggestion ('краще було б через job').",
+    "not_counted": "Allowed opinions, context mentions, explicit 'this is fine', correctness notes."
+  }
+}

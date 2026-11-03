@@ -1,0 +1,23 @@
+{
+  "name": "@devdigest/agent-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DevDigest CI runner — a JS GitHub Action. Bundles reviewer-core + shared contracts into dist/index.js (committed; GitHub runs it as-is).",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "build": "ncc build src/index.ts -o dist"
+  },
+  "dependencies": {
+    "openai": "^4.77.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vercel/ncc": "0.45.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

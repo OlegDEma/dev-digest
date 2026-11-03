@@ -19,6 +19,7 @@ export function FindingsPanel({
   headSha,
   targetFindingId,
   targetNonce,
+  agentId,
 }: {
   findings: FindingRecord[];
   prId: string;
@@ -27,6 +28,8 @@ export function FindingsPanel({
   /** Finding to focus + expand (a deep-link/click landed on it). */
   targetFindingId?: string | null;
   targetNonce?: number;
+  /** Producing agent of this review (enables "Turn into eval case" on its findings). */
+  agentId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -82,6 +85,7 @@ export function FindingsPanel({
               pending={action.isPending}
               repoFullName={repoFullName}
               headSha={headSha}
+              agentId={agentId}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
             />
           ))

@@ -70,6 +70,12 @@ export function renderProjectContextDoc(d: ProjectContextDocInput): string {
   return wrapUntrusted(sanitizeSourceLabel(d.path), d.text);
 }
 
+/** One extra file handed to the engine as read-only context (untrusted); never citable. */
+export interface ReviewContextFile {
+  path: string;
+  content: string;
+}
+
 /** Cap the PR description so a huge author body can't blow the token budget. */
 const MAX_PR_DESCRIPTION_CHARS = 4000;
 
@@ -103,11 +109,18 @@ export interface PromptParts {
    * undefined → section omitted.
    */
   prDescription?: string;
+  /** Override of the PR-description cap (default 4000); eval cases pass a larger one. */
+  prDescriptionMaxChars?: number;
   /**
    * Rendered derived PR intent (untrusted — derived from author-controlled
    * text). Delimiter-wrapped, followed by scope rules, right before the diff.
    */
   intent?: string;
+  /**
+   * Extra files shown as context only (untrusted, one fenced block per file),
+   * rendered right before the diff. Empty / undefined → section omitted.
+   */
+  contextFiles?: ReviewContextFile[];
   /** The unified diff / user task (untrusted content). */
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
@@ -124,6 +137,7 @@ export type ReviewPromptSectionName =
   | 'specs'
   | 'callers'
   | 'intent'
+  | 'context_files'
   | 'diff';
 
 /** One rendered piece of the prompt, exactly as sent (for measurement, not display). */
@@ -161,7 +175,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
 
   const prDescription =
     parts.prDescription && parts.prDescription.trim().length > 0
-      ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
+      ? parts.prDescription.slice(0, parts.prDescriptionMaxChars ?? MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
   const userSections: ReviewPromptSection[] = [];
@@ -186,6 +200,15 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     push(
       'intent',
       `## PR intent (derived — untrusted)\n${wrapUntrusted('pr-intent', intentBlock)}\n${INTENT_RULES}`,
+    );
+  }
+  if (parts.contextFiles && parts.contextFiles.length > 0) {
+    push(
+      'context_files',
+      `## Additional files (context only — not part of the diff)\n${parts.contextFiles
+        .map((f) => wrapUntrusted(`file:${sanitizeSourceLabel(f.path)}`, f.content))
+        .join('\n\n')}`,
+      parts.contextFiles.length,
     );
   }
   push('diff', `## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);

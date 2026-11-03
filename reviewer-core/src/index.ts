@@ -19,6 +19,7 @@ export {
   sanitizeSourceLabel,
   renderProjectContextDoc,
   type ProjectContextDocInput,
+  type ReviewContextFile,
   type PromptParts,
   type AssembledPrompt,
   type ReviewPromptSection,
@@ -67,6 +68,7 @@ export {
 } from './llm/structured.js';
 
 // Map-reduce helpers (reduce partials, slice a file's diff).
+export { formatSkillBlock } from './review/skills.js';
 export { reduceReviews, sliceDiff, capOutOfScopeFindings } from './review/reduce.js';
 
 // The engine entry point: given (diff + resolved agent inputs + LLM) → grounded Review.

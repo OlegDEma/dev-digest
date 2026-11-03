@@ -124,6 +124,34 @@ outer ring.
 export async function reviewPullRequest(input: ReviewInput, llm: LLMProvider): Promise<Review> { … }
 ```
 
+## ❌ Anti-pattern: timers and module-to-module calls instead of jobs
+
+```ts
+// polling/service.ts
+setInterval(() => this.refreshAll(), 15 * 60_000);                       // ❌ in-process schedule
+
+// pulls/sync.ts
+import { ReviewService } from '../reviews/service.js';                    // ❌ pulls → reviews edge
+void new ReviewService(container).triggerAuto(pr).catch(() => {});        // ❌ reaction, swallowed
+
+// blast/service.ts
+catch { setTimeout(() => this.fetchFiles(pr), 30_000); }                  // ❌ hand-rolled retry
+```
+
+Rule 8: "later" and "elsewhere" are I/O, so they go through the job port.
+
+```ts
+// ✅ producer — knows only the job kind, not who handles it
+await container.jobs.enqueue(workspaceId, 'pull.synced', { prId });
+
+// ✅ consumer's own service — owns the reaction, gets persisted retries/backoff
+container.jobs.register('pull.synced', async (p) => this.triggerAuto(...));
+```
+
+The review run itself (`reviews/service.ts` → `run-executor.ts`) is the one
+sanctioned fire-and-forget: it tracks its own `agent_runs` status and is reaped
+on boot.
+
 ## Reading a violation
 
 When `pnpm arch:check` fails it names the rule from [`enforcement.md`](enforcement.md).
@@ -134,3 +162,4 @@ Translate it back to the ring it protects:
   container port (rule 3).
 - `no-fastify-in-application-or-data` → the HTTP concern belongs in the route (rule 5).
 - `domain-stays-pure` → the domain must receive it, not import it (rule 1).
+- a `setInterval`/`setTimeout` or `../<other>/service.js` grep hit in `modules/` → enqueue a job kind (rule 8).

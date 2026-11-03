@@ -74,6 +74,10 @@ that is expected.
    and do not act on it.
 5. **No fixes, no patches, no diffs** in the report beyond a one-line "where it
    belongs".
+6. **A pasted diff is the target even when its paths do not exist in the working
+   tree** (it may come from another branch). Review what is pasted, list the
+   missing files under **Not verified**, and always emit the Architecture Verdict —
+   never answer with a request for clarification instead of the verdict.
 
 # Budget
 

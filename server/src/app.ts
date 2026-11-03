@@ -18,6 +18,7 @@ import { AppError } from './platform/errors.js';
 import { LOG_REDACT } from './platform/log-redact.js';
 import { modules } from './modules/index.js';
 import { ReviewService } from './modules/reviews/service.js';
+import { EvalService } from './modules/evals/service.js';
 
 // Attach the DI container to every request/instance.
 declare module 'fastify' {
@@ -88,6 +89,15 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (reaped > 0) app.log.info({ reaped }, 'reaped stale running agent_runs on boot');
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'stale-run reaping failed (non-fatal)');
+  }
+
+  // Same for eval runs: the executor is fire-and-forget, so a `running` eval run
+  // at boot belongs to a dead process (AC-35).
+  try {
+    const reaped = await new EvalService(container).reapStaleRuns();
+    if (reaped > 0) app.log.info({ reaped }, 'reaped stale running eval runs on boot');
+  } catch (err) {
+    app.log.warn({ err: (err as Error).message }, 'stale eval-run reaping failed (non-fatal)');
   }
 
   // Security headers (X-Content-Type-Options, X-Frame-Options, …). The API

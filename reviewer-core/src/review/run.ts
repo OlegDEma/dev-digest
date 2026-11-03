@@ -12,6 +12,7 @@ import {
   assemblePrompt,
   renderIntentBlock,
   type ProjectContextDocInput,
+  type ReviewContextFile,
   type ReviewPromptSection,
 } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
@@ -86,6 +87,14 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /** Override of the engine's PR-description cap (default 4000). */
+  prDescriptionMaxChars?: number;
+  /**
+   * Extra files shown as context only (untrusted, fenced per file, before the
+   * diff, in every chunk call). Findings citing them fail grounding. Empty /
+   * undefined → section omitted.
+   */
+  contextFiles?: ReviewContextFile[];
   /**
    * Derived PR intent (untrusted). When present it is rendered before the diff
    * and out-of-scope findings are deterministically capped to one.
@@ -160,6 +169,8 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    prDescriptionMaxChars: input.prDescriptionMaxChars,
+    contextFiles: input.contextFiles,
     intent: input.intent ? renderIntentBlock(input.intent) : undefined,
     task: input.task,
   };

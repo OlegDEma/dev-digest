@@ -1,0 +1,1 @@
+export { ResultStrip } from "./ResultStrip";
