@@ -1,7 +1,7 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './platform/config.js';
 
-/** Production/dev entrypoint. `pnpm dev` runs `tsx watch src/server.ts`. */
+/** Production/dev entrypoint. `pnpm dev` runs `tsx watch src/server.ts`; nothing else imports it. */
 async function main() {
   const config = loadConfig();
   const app = await buildApp({ config });
